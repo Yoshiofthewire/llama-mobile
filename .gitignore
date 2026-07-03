@@ -1,0 +1,30 @@
+# IDE / editor
+*.iml
+.idea/
+
+# Gradle / Kotlin build state
+.gradle/
+.kotlin/
+
+# Local machine config
+local.properties
+/local.properties
+
+# Build outputs
+build/
+**/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Logs
+*.log
+
+# Signing / local secrets
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# OS artifacts
+.DS_Store

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_inbox"
+        android:title="@string/nav_inbox" />
+    <item
+        android:id="@+id/nav_compose"
+        android:title="@string/nav_compose" />
+    <item
+        android:id="@+id/nav_spam"
+        android:title="@string/nav_spam" />
+    <item
+        android:id="@+id/nav_trash"
+        android:title="@string/nav_trash" />
+</menu>
+
