@@ -14,6 +14,7 @@ class PushGraph(context: Context) {
         repository = repository,
         registrationClient = NativeRegistrationClient(),
     )
+    val mfaResponseClient = MfaResponseClient()
 }
 
 object PushRuntime {
