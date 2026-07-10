@@ -21,12 +21,10 @@ class EmailAdapter(
         private val unreadDot: View = view.findViewById(R.id.unreadDot)
         private val subjectTextView: TextView = view.findViewById(R.id.textViewSubject)
         private val senderTextView: TextView = view.findViewById(R.id.textViewSender)
-        private val previewTextView: TextView = view.findViewById(R.id.textViewPreview)
 
         fun bind(email: Email, palette: ThemePalette) {
             subjectTextView.text = email.subject
             senderTextView.text = email.sender
-            previewTextView.text = email.preview
 
             val panel = Color.parseColor(palette.panel)
             cardView.setCardBackgroundColor(panel)
@@ -42,7 +40,6 @@ class EmailAdapter(
             subjectTextView.setTypeface(subjectTextView.typeface, if (isUnread) Typeface.BOLD else Typeface.NORMAL)
             subjectTextView.setTextColor(Color.parseColor(if (isUnread) palette.inkStrong else palette.ink))
             senderTextView.setTextColor(Color.parseColor(palette.ink))
-            previewTextView.setTextColor(Color.parseColor(palette.ink))
 
             itemView.setOnClickListener { onEmailClick?.invoke(email) }
         }
