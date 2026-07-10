@@ -17,9 +17,9 @@ object PushNotificationDispatcher {
     private const val CHANNEL_ID = "llama_labels_push"
     private const val MFA_CHANNEL_ID = "llama_labels_mfa"
 
-    internal const val ACTION_MFA_APPROVE = "com.urlxl.mail.push.ACTION_MFA_APPROVE"
-    internal const val ACTION_MFA_DENY = "com.urlxl.mail.push.ACTION_MFA_DENY"
-    internal const val EXTRA_MFA_CHALLENGE_ID = "challengeId"
+    const val ACTION_MFA_APPROVE = "com.urlxl.mail.push.ACTION_MFA_APPROVE"
+    const val ACTION_MFA_DENY = "com.urlxl.mail.push.ACTION_MFA_DENY"
+    const val EXTRA_MFA_CHALLENGE_ID = "challengeId"
 
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

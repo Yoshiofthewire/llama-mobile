@@ -4,6 +4,9 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.urlxl.mail.push.MfaApprovalActivity
+import com.urlxl.mail.push.MfaChallengePayloadParser
+import com.urlxl.mail.push.PushNotificationDispatcher
 import com.urlxl.mail.push.PushRuntime
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -16,6 +19,16 @@ class MainActivity : AppCompatActivity() {
         val mailSettings = MailSettings(this)
 
         lifecycleScope.launch {
+            intent.extras?.let { extras ->
+                MfaChallengePayloadParser.parse(extras)?.let { mfa ->
+                    val mfaIntent = Intent(this@MainActivity, MfaApprovalActivity::class.java)
+                    mfaIntent.putExtra(PushNotificationDispatcher.EXTRA_MFA_CHALLENGE_ID, mfa.challengeId)
+                    startActivity(mfaIntent)
+                    finish()
+                    return@launch
+                }
+            }
+
             // Manual IMAP mode is "configured" once host/user/pass are filled in; Relay mode is
             // "configured" once the device is paired — checking isConfigured() alone here would
             // trap a paired, relay-only user in a loop back to Settings since they never fill IMAP

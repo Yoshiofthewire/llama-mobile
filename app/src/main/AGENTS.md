@@ -18,11 +18,11 @@ Owns production Android app code and resources.
 - MFA push 2FA: an incoming FCM data payload with `type: "mfa_challenge"` and `challengeId` is parsed by `MfaChallengePayloadParser` (distinct from the mail payload parser) and shown via a separate high-importance notification channel (`PushNotificationDispatcher.showMfaChallenge`) with Approve/Deny actions. Actions are handled by `MfaResponseReceiver` (`PendingIntent.getBroadcast`, the only broadcast-receiver-driven notification actions in this app); tapping the notification body instead opens `MfaApprovalActivity`, an in-app fallback for when OEM background restrictions kill the action broadcast. Both paths call `MfaResponseReceiver.respond`, which POSTs to `{serverUrl}/api/mfa/push/respond` via `MfaResponseClient` using the same `sub`/`hash` pairing credential as native register/pull — no new device-auth scheme. The backend enforces that only a push-2FA-enabled account's own paired device can approve its challenge; the mobile side surfaces `403`/`409` responses as toasts rather than treating them as generic errors.
 - Push notifications are shown via Android notification channel and copied into in-app history preview.
 - Android 13+ notification runtime permission is requested from launcher UI.
-- `MainActivity` is a router, not a home screen: it picks `SettingsActivity` vs `InboxActivity`
-  based on whether the active connection mode is actually usable (`MailSettings.isConfigured()`
-  for Manual IMAP, device-paired check for Relay) and finishes itself. It does not manage pairing,
-  token sync, or push history UI — that lives in `push/PushPairingActivity`, reached from the
-  Inbox overflow menu.
+- `MainActivity` is a router, not a home screen: it picks `MfaApprovalActivity` (if started from an
+  MFA push), `SettingsActivity` vs `InboxActivity` based on whether the active connection mode is
+  actually usable (`MailSettings.isConfigured()` for Manual IMAP, device-paired check for Relay)
+  and finishes itself. It does not manage pairing, token sync, or push history UI — that lives in
+  `push/PushPairingActivity`, reached from the Inbox overflow menu.
 - Mail config (IMAP/SMTP host, port, credentials) is persisted in plaintext `SharedPreferences` and
   entered via `SettingsActivity`, only when `MailConnectionMode.MANUAL_IMAP` is selected. Required
   fields: IMAP host, SMTP host, username, password. Ports default to 993 (IMAP) and 587 (SMTP).

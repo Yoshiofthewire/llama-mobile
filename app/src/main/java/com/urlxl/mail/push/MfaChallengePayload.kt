@@ -13,4 +13,11 @@ object MfaChallengePayloadParser {
         if (challengeId.isBlank()) return null
         return MfaChallengePayload(challengeId = challengeId)
     }
+
+    fun parse(bundle: android.os.Bundle): MfaChallengePayload? {
+        if (bundle.getString("type") != TYPE_MFA_CHALLENGE) return null
+        val challengeId = bundle.getString("challengeId").orEmpty().trim()
+        if (challengeId.isBlank()) return null
+        return MfaChallengePayload(challengeId = challengeId)
+    }
 }
