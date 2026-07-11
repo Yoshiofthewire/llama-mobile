@@ -44,34 +44,19 @@ class ContactsListActivity : AppCompatActivity() {
         enableDeviceSyncAfterPermissionGrant()
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        android.util.Log.d("ContactsListActivity", "onDestroy()")
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        android.util.Log.d("ContactsListActivity", "onCreate() START")
         super.onCreate(savedInstanceState)
-        android.util.Log.d("ContactsListActivity", "super.onCreate() done")
         try {
-            android.util.Log.d("ContactsListActivity", "setContentView...")
             setContentView(R.layout.activity_contacts_list)
-            android.util.Log.d("ContactsListActivity", "setContentView OK")
-
-            android.util.Log.d("ContactsListActivity", "applyTheme...")
             applyThemeToActivity(this)
-            android.util.Log.d("ContactsListActivity", "applyTheme OK")
-
             applyThemedTitle(this, getString(R.string.contacts_title))
             applyTopInsetWithHeader(this, findViewById(R.id.contactsRoot))
 
-            android.util.Log.d("ContactsListActivity", "findViewById...")
             recyclerView = findViewById(R.id.recyclerViewContacts)
             emptyText = findViewById(R.id.contactsEmptyText)
             val addButton = findViewById<FloatingActionButton>(R.id.btnAddContact)
-            android.util.Log.d("ContactsListActivity", "findViewById OK")
 
-            android.util.Log.d("ContactsListActivity", "adapter...")
             adapter = ContactAdapter { contact ->
                 startActivity(
                     Intent(this, ContactEditActivity::class.java)
@@ -80,34 +65,28 @@ class ContactsListActivity : AppCompatActivity() {
             }
             recyclerView.layoutManager = LinearLayoutManager(this)
             recyclerView.adapter = adapter
-            android.util.Log.d("ContactsListActivity", "adapter OK")
 
             addButton.setOnClickListener {
                 startActivity(Intent(this, ContactEditActivity::class.java))
             }
-            android.util.Log.d("ContactsListActivity", "onCreate() COMPLETE")
         } catch (e: Exception) {
             android.util.Log.e("ContactsListActivity", "onCreate crashed", e)
             finish()
             return
         }
 
-        // TEMP: Disabled flow collection for debugging
-        if (false) {
-            lifecycleScope.launch {
-                repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    try {
-                        ContactsRuntime.graph(this@ContactsListActivity).repository.observeContacts().collect { contacts ->
-                            render(contacts)
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("DeviceContactSync", "Error observing contacts", e)
-                        Toast.makeText(this@ContactsListActivity, "Error loading contacts", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                try {
+                    ContactsRuntime.graph(this@ContactsListActivity).repository.observeContacts().collect { contacts ->
+                        render(contacts)
                     }
+                } catch (e: Exception) {
+                    android.util.Log.e("ContactsListActivity", "Error observing contacts", e)
+                    Toast.makeText(this@ContactsListActivity, "Error loading contacts", Toast.LENGTH_SHORT).show()
                 }
             }
         }
-        render(emptyList())
     }
 
     override fun onStart() {
