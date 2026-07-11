@@ -19,12 +19,12 @@ object DeviceContactConflictResolver {
         deviceUpdatedAtEpochMs: Long?,
     ): Winner {
         return when {
-            roomUpdatedAtEpochMs == null && deviceUpdatedAtEpochMs == null -> TIE_PREFER_ROOM
-            roomUpdatedAtEpochMs == null -> DEVICE
-            deviceUpdatedAtEpochMs == null -> ROOM
-            roomUpdatedAtEpochMs > deviceUpdatedAtEpochMs -> ROOM
-            deviceUpdatedAtEpochMs > roomUpdatedAtEpochMs -> DEVICE
-            else -> TIE_PREFER_ROOM
+            roomUpdatedAtEpochMs == null && deviceUpdatedAtEpochMs == null -> Winner.TIE_PREFER_ROOM
+            roomUpdatedAtEpochMs == null -> Winner.DEVICE
+            deviceUpdatedAtEpochMs == null -> Winner.ROOM
+            roomUpdatedAtEpochMs > deviceUpdatedAtEpochMs -> Winner.ROOM
+            deviceUpdatedAtEpochMs > roomUpdatedAtEpochMs -> Winner.DEVICE
+            else -> Winner.TIE_PREFER_ROOM
         }
     }
 }

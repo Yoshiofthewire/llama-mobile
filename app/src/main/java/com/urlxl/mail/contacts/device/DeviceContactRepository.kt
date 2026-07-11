@@ -5,6 +5,7 @@ import android.provider.ContactsContract
 import com.urlxl.mail.contacts.ContactDto
 import com.urlxl.mail.contacts.ContactFieldDto
 import com.urlxl.mail.contacts.ContactSyncRepository
+import com.urlxl.mail.contacts.device.DeviceContactMappers.toContactDto
 import com.urlxl.mail.contacts.device.DeviceContactMappers.toDto
 import com.urlxl.mail.data.AppDatabase
 import kotlinx.coroutines.Dispatchers
@@ -125,7 +126,7 @@ class DeviceContactRepository(
 
             if (changed) {
                 val mergedDto = roomDto.copy(
-                    fn = mergedFn,
+                    fn = mergedFn ?: "",
                     org = mergedOrg,
                     notes = mergedNotes,
                     birthday = mergedBirthday,
@@ -144,11 +145,13 @@ class DeviceContactRepository(
     }
 
     private suspend fun clearDirtyFlag(rawContactId: Long) = withContext(Dispatchers.IO) {
+        val uri = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
+            .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+            .build()
         val ops = arrayListOf(
-            android.content.ContentProviderOperation.newUpdate(ContactsContract.RawContacts.CONTENT_URI)
+            android.content.ContentProviderOperation.newUpdate(uri)
                 .withSelection("${ContactsContract.RawContacts._ID} = ?", arrayOf(rawContactId.toString()))
                 .withValue(ContactsContract.RawContacts.DIRTY, 0)
-                .withValue("caller_is_syncadapter", true)
                 .build(),
         )
         runCatching {
@@ -200,9 +203,12 @@ class DeviceContactRepository(
             val candidate = readRawContactSnapshot(rawContactId)
             if (candidate == null) continue
 
+            val candidateEmails = candidate.emails.map { it.value }
+            val candidatePhones = candidate.phones.map { it.value }
+
             val matchedUid = DeviceContactMatcher.findMatch(
-                candidate.emails.map { it.value },
-                candidate.phones.map { it.value },
+                candidateEmails,
+                candidatePhones,
                 existing,
             )
 
@@ -214,9 +220,16 @@ class DeviceContactRepository(
                         deviceUpdatedAtEpochMs = candidate.lastUpdatedEpochMs,
                     ),
                 )
-            } else {
-                val newDto = candidate.toContactDto(UUID.randomUUID().toString(), 0)
-                syncRepository.queueCreate(newDto)
+            } else if (candidateEmails.isNotEmpty() || candidatePhones.isNotEmpty()) {
+                val alreadyImported = existing.any { existingContact ->
+                    existingContact.fn.equals(candidate.fn, ignoreCase = true) &&
+                        (candidateEmails.any { it.equals(existingContact.emails.firstOrNull()?.value ?: "", ignoreCase = true) } ||
+                            candidatePhones.any { it == existingContact.phones.firstOrNull()?.value })
+                }
+                if (!alreadyImported) {
+                    val newDto = candidate.toContactDto(UUID.randomUUID().toString(), 0)
+                    syncRepository.queueCreate(newDto)
+                }
             }
         }
 
@@ -241,17 +254,25 @@ class DeviceContactRepository(
     private suspend fun createRawContactForDto(dto: ContactDto) = withContext(Dispatchers.IO) {
         val ops = arrayListOf<android.content.ContentProviderOperation>()
 
-        val rawContactUri = ops.add(
-            android.content.ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
+        val rawContactUriBase = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
+            .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+            .build()
+
+        val rawContactUriIndex = ops.size
+        ops.add(
+            android.content.ContentProviderOperation.newInsert(rawContactUriBase)
                 .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, DeviceContactAccount.ACCOUNT_TYPE)
                 .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, DeviceContactAccount.ACCOUNT_NAME)
-                .withValue("caller_is_syncadapter", true)
                 .build(),
         )
 
+        val dataUriBase = ContactsContract.Data.CONTENT_URI.buildUpon()
+            .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+            .build()
+
         ops.add(
-            android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUri)
+            android.content.ContentProviderOperation.newInsert(dataUriBase)
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUriIndex)
                 .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
                 .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, dto.fn)
                 .withValue(ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME, dto.givenName)
@@ -259,73 +280,67 @@ class DeviceContactRepository(
                 .withValue(ContactsContract.CommonDataKinds.StructuredName.MIDDLE_NAME, dto.middleName)
                 .withValue(ContactsContract.CommonDataKinds.StructuredName.PREFIX, dto.prefix)
                 .withValue(ContactsContract.CommonDataKinds.StructuredName.SUFFIX, dto.suffix)
-                .withValue("caller_is_syncadapter", true)
                 .build(),
         )
 
         if (!dto.org.isNullOrBlank()) {
             ops.add(
-                android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUri)
+                android.content.ContentProviderOperation.newInsert(dataUriBase)
+                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUriIndex)
                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE)
                     .withValue(ContactsContract.CommonDataKinds.Organization.COMPANY, dto.org)
                     .withValue(ContactsContract.CommonDataKinds.Organization.TITLE, dto.title)
-                    .withValue("caller_is_syncadapter", true)
                     .build(),
             )
         }
 
         if (!dto.notes.isNullOrBlank()) {
             ops.add(
-                android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUri)
+                android.content.ContentProviderOperation.newInsert(dataUriBase)
+                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUriIndex)
                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE)
                     .withValue(ContactsContract.CommonDataKinds.Note.NOTE, dto.notes)
-                    .withValue("caller_is_syncadapter", true)
                     .build(),
             )
         }
 
         if (!dto.birthday.isNullOrBlank()) {
             ops.add(
-                android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUri)
+                android.content.ContentProviderOperation.newInsert(dataUriBase)
+                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUriIndex)
                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Event.CONTENT_ITEM_TYPE)
                     .withValue(ContactsContract.CommonDataKinds.Event.START_DATE, dto.birthday)
                     .withValue(ContactsContract.CommonDataKinds.Event.TYPE, 3)
-                    .withValue("caller_is_syncadapter", true)
                     .build(),
             )
         }
 
         for (email in dto.emails) {
             ops.add(
-                android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUri)
+                android.content.ContentProviderOperation.newInsert(dataUriBase)
+                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUriIndex)
                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE)
                     .withValue(ContactsContract.CommonDataKinds.Email.ADDRESS, email.value)
                     .withValue(ContactsContract.CommonDataKinds.Email.TYPE, email.label ?: "")
-                    .withValue("caller_is_syncadapter", true)
                     .build(),
             )
         }
 
         for (phone in dto.phones) {
             ops.add(
-                android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUri)
+                android.content.ContentProviderOperation.newInsert(dataUriBase)
+                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUriIndex)
                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
                     .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, phone.value)
                     .withValue(ContactsContract.CommonDataKinds.Phone.TYPE, phone.label ?: "")
-                    .withValue("caller_is_syncadapter", true)
                     .build(),
             )
         }
 
         for (address in dto.addresses) {
             ops.add(
-                android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUri)
+                android.content.ContentProviderOperation.newInsert(dataUriBase)
+                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactUriIndex)
                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE)
                     .withValue(ContactsContract.CommonDataKinds.StructuredPostal.STREET, address.street)
                     .withValue(ContactsContract.CommonDataKinds.StructuredPostal.CITY, address.city)
@@ -333,7 +348,6 @@ class DeviceContactRepository(
                     .withValue(ContactsContract.CommonDataKinds.StructuredPostal.POSTCODE, address.postalCode)
                     .withValue(ContactsContract.CommonDataKinds.StructuredPostal.COUNTRY, address.country)
                     .withValue(ContactsContract.CommonDataKinds.StructuredPostal.TYPE, address.label ?: "")
-                    .withValue("caller_is_syncadapter", true)
                     .build(),
             )
         }
@@ -343,8 +357,8 @@ class DeviceContactRepository(
         }.getOrNull() ?: return@withContext
 
         if (results.isNotEmpty() && results[0] != null) {
-            val rawContactUri = results[0]!!.uri
-            val rawContactId = rawContactUri.lastPathSegment?.toLongOrNull() ?: return@withContext
+            val rawContactUri = results[0].uri
+            val rawContactId = rawContactUri?.lastPathSegment?.toLongOrNull() ?: return@withContext
             db.deviceContactLinkDao().upsert(
                 com.urlxl.mail.data.DeviceContactLinkEntity(
                     uid = dto.uid,
@@ -412,9 +426,13 @@ class DeviceContactRepository(
 
         val ops = arrayListOf<android.content.ContentProviderOperation>()
 
+        val dataUriBase = ContactsContract.Data.CONTENT_URI.buildUpon()
+            .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+            .build()
+
         if (mergedNameDisplay != currentSnapshot.fn) {
             ops.add(
-                android.content.ContentProviderOperation.newUpdate(ContactsContract.Data.CONTENT_URI)
+                android.content.ContentProviderOperation.newUpdate(dataUriBase)
                     .withSelection(
                         "${ContactsContract.Data.RAW_CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?",
                         arrayOf(
@@ -422,8 +440,7 @@ class DeviceContactRepository(
                             ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE,
                         ),
                     )
-                    .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, mergedNameDisplay)
-                    .withValue("caller_is_syncadapter", true)
+                    .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, mergedNameDisplay ?: "")
                     .build(),
             )
         }
@@ -442,13 +459,15 @@ class DeviceContactRepository(
     suspend fun deleteDeviceRawContact(uid: String) = withContext(Dispatchers.IO) {
         val link = db.deviceContactLinkDao().getByUid(uid) ?: return@withContext
 
+        val uri = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
+            .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+            .build()
         val deleteOps = arrayListOf(
-            android.content.ContentProviderOperation.newDelete(
-                ContactsContract.RawContacts.CONTENT_URI,
-            ).withSelection(
-                "${ContactsContract.RawContacts._ID} = ?",
-                arrayOf(link.rawContactId.toString()),
-            ).withValue("caller_is_syncadapter", true).build(),
+            android.content.ContentProviderOperation.newDelete(uri)
+                .withSelection(
+                    "${ContactsContract.RawContacts._ID} = ?",
+                    arrayOf(link.rawContactId.toString()),
+                ).build(),
         )
 
         runCatching {
@@ -459,7 +478,7 @@ class DeviceContactRepository(
     }
 
     private suspend fun queryContactLastUpdated(contactId: Long): Long = withContext(Dispatchers.IO) {
-        val projection = arrayOf(ContactsContract.Contacts.CONTACTS_LAST_UPDATED_TIMESTAMP)
+        val projection = arrayOf(ContactsContract.Contacts.CONTACT_LAST_UPDATED_TIMESTAMP)
         contentResolver.query(
             ContactsContract.Contacts.CONTENT_URI,
             projection,
@@ -468,7 +487,7 @@ class DeviceContactRepository(
             null,
         )?.use { cursor ->
             if (cursor.moveToFirst()) {
-                val idx = cursor.getColumnIndexOrThrow(ContactsContract.Contacts.CONTACTS_LAST_UPDATED_TIMESTAMP)
+                val idx = cursor.getColumnIndexOrThrow(ContactsContract.Contacts.CONTACT_LAST_UPDATED_TIMESTAMP)
                 return@withContext cursor.getLong(idx)
             }
         }

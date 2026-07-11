@@ -8,14 +8,14 @@ object DeviceContactFieldMerge {
         roomValue: T?,
         deviceValue: T?,
         isEmpty: (T) -> Boolean,
-        recordWinner: (T, Winner) -> Unit,
+        recordWinner: (T?, Winner) -> Unit,
     ): T? {
         val roomEmpty = roomValue == null || isEmpty(roomValue)
         val deviceEmpty = deviceValue == null || isEmpty(deviceValue)
 
         return when {
             roomEmpty && deviceEmpty -> {
-                recordWinner(null as T, Winner.TIE_PREFER_ROOM)
+                recordWinner(null, Winner.TIE_PREFER_ROOM)
                 null
             }
             roomEmpty && !deviceEmpty -> {

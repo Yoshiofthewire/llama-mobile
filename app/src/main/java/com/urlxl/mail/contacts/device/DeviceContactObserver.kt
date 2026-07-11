@@ -1,7 +1,7 @@
 package com.urlxl.mail.contacts.device
 
-import android.content.ContentObserver
 import android.content.Context
+import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.ContactsContract
