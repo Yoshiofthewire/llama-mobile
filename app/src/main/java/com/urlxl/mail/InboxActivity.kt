@@ -503,13 +503,17 @@ class InboxActivity : AppCompatActivity() {
                     refreshInbox()
                     true
                 }
+                // Return false for items that launch a separate screen: the tap still fires the
+                // action, but the nav selection stays on Inbox. Returning true would mark the item
+                // selected, and BottomNavigationView never re-fires the selected listener for an
+                // already-selected item — making the button dead after returning via back.
                 R.id.nav_compose -> {
                     startActivity(Intent(this, ComposeActivity::class.java))
-                    true
+                    false
                 }
                 R.id.nav_contacts -> {
                     startActivity(Intent(this, com.urlxl.mail.contacts.ContactsListActivity::class.java))
-                    true
+                    false
                 }
                 else -> false
             }

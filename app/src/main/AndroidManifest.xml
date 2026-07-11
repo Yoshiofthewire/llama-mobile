@@ -56,15 +56,12 @@
 
         <activity
             android:name=".contacts.ContactsListActivity"
-            android:exported="false"
-            android:launchMode="singleTop"
-            android:taskAffinity=".contacts" />
+            android:exported="false" />
 
         <activity
             android:name=".contacts.ContactEditActivity"
             android:exported="false"
-            android:windowSoftInputMode="adjustResize"
-            android:taskAffinity=".contacts" />
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".push.PushPairingActivity"
