@@ -71,13 +71,13 @@ class EmailDetailActivity : AppCompatActivity() {
         MailBackgroundExecutor.submit { mailRepository.markRead(emailId, emailFolder) }
 
         actionArchive.setOnClickListener {
-            runMailActionAndFinish(getString(R.string.action_archive)) { it.archive(emailId, emailFolder) }
+            runMailActionAndFinish(getString(R.string.action_archive), emailId) { it.archive(emailId, emailFolder) }
         }
         actionDelete.setOnClickListener {
-            runMailActionAndFinish(getString(R.string.action_delete)) { it.delete(emailId, emailFolder) }
+            runMailActionAndFinish(getString(R.string.action_delete), emailId) { it.delete(emailId, emailFolder) }
         }
         actionJunk.setOnClickListener {
-            runMailActionAndFinish(getString(R.string.action_junk)) { it.spam(emailId, emailFolder) }
+            runMailActionAndFinish(getString(R.string.action_junk), emailId) { it.spam(emailId, emailFolder) }
         }
         actionReply.setOnClickListener {
             openCompose(
@@ -177,9 +177,14 @@ class EmailDetailActivity : AppCompatActivity() {
         actionButtons.forEach { applyIconButtonTheme(this, it) }
     }
 
-    private fun runMailActionAndFinish(actionLabel: String, action: (MailRepository) -> Unit) {
+    private fun runMailActionAndFinish(actionLabel: String, emailId: String, action: (MailRepository) -> Unit) {
         Toast.makeText(this, actionLabel, Toast.LENGTH_SHORT).show()
         MailBackgroundExecutor.submit { action(mailRepository) }
+        // Tell InboxActivity which row to drop immediately, mirroring its own swipe-to-archive/
+        // delete optimistic removal. Without this, returning here re-triggers InboxActivity's
+        // onStart refresh, which races the still-in-flight mutation above and can redraw the row
+        // we just "removed" — the mutation still lands, it just looks like the button did nothing.
+        setResult(RESULT_OK, Intent().putExtra(EXTRA_REMOVED_EMAIL_ID, emailId))
         finish()
     }
 
@@ -206,5 +211,9 @@ class EmailDetailActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         ioExecutor.shutdownNow()
+    }
+
+    companion object {
+        const val EXTRA_REMOVED_EMAIL_ID = "removed_email_id"
     }
 }

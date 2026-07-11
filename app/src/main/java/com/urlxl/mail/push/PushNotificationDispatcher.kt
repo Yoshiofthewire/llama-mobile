@@ -20,6 +20,9 @@ object PushNotificationDispatcher {
     const val ACTION_MFA_APPROVE = "com.urlxl.mail.push.ACTION_MFA_APPROVE"
     const val ACTION_MFA_DENY = "com.urlxl.mail.push.ACTION_MFA_DENY"
     const val EXTRA_MFA_CHALLENGE_ID = "challengeId"
+    const val EXTRA_MESSAGE_ID = "com.urlxl.mail.push.EXTRA_MESSAGE_ID"
+    const val EXTRA_SENDER = "com.urlxl.mail.push.EXTRA_SENDER"
+    const val EXTRA_SUBJECT = "com.urlxl.mail.push.EXTRA_SUBJECT"
 
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -63,6 +66,10 @@ object PushNotificationDispatcher {
 
         val launchIntent = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(EXTRA_MESSAGE_ID, payload.messageId)
+            .putExtra(EXTRA_SENDER, payload.senderName)
+            .putExtra(EXTRA_SUBJECT, payload.emailSubject)
+            .putExtra(EXTRA_MESSAGE_ID, payload.messageId)
 
         val pendingIntent = android.app.PendingIntent.getActivity(
             context,

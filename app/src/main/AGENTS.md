@@ -21,8 +21,9 @@ Owns production Android app code and resources.
 - `MainActivity` is a router, not a home screen: it picks `MfaApprovalActivity` (if started from an
   MFA push), `SettingsActivity` vs `InboxActivity` based on whether the active connection mode is
   actually usable (`MailSettings.isConfigured()` for Manual IMAP, device-paired check for Relay)
-  and finishes itself. It does not manage pairing, token sync, or push history UI — that lives in
-  `push/PushPairingActivity`, reached from the Inbox overflow menu.
+  and finishes itself. It passes `EXTRA_MESSAGE_ID` from push notifications to `InboxActivity` to
+  enable deep-linking directly to a new email. It does not manage pairing, token sync, or push
+  history UI — that lives in `push/PushPairingActivity`, reached from the Inbox overflow menu.
 - Mail config (IMAP/SMTP host, port, credentials) is persisted in plaintext `SharedPreferences` and
   entered via `SettingsActivity`, only when `MailConnectionMode.MANUAL_IMAP` is selected. Required
   fields: IMAP host, SMTP host, username, password. Ports default to 993 (IMAP) and 587 (SMTP).

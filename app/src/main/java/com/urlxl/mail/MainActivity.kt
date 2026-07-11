@@ -15,7 +15,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleIntent(intent)
+    }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent) {
         val mailSettings = MailSettings(this)
 
         lifecycleScope.launch {
@@ -38,12 +47,19 @@ class MainActivity : AppCompatActivity() {
                 MailConnectionMode.MANUAL_IMAP -> mailSettings.isConfigured()
             }
 
-            val intent = if (configured) {
-                Intent(this@MainActivity, InboxActivity::class.java)
+            val targetIntent = if (configured) {
+                Intent(this@MainActivity, InboxActivity::class.java).apply {
+                    val msgId = intent.getStringExtra(PushNotificationDispatcher.EXTRA_MESSAGE_ID)
+                    if (msgId != null) {
+                        putExtra(PushNotificationDispatcher.EXTRA_MESSAGE_ID, msgId)
+                        putExtra(PushNotificationDispatcher.EXTRA_SENDER, intent.getStringExtra(PushNotificationDispatcher.EXTRA_SENDER))
+                        putExtra(PushNotificationDispatcher.EXTRA_SUBJECT, intent.getStringExtra(PushNotificationDispatcher.EXTRA_SUBJECT))
+                    }
+                }
             } else {
                 Intent(this@MainActivity, SettingsActivity::class.java)
             }
-            startActivity(intent)
+            startActivity(targetIntent)
             finish()
         }
     }

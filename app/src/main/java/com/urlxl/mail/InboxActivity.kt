@@ -12,8 +12,9 @@ import android.os.Looper
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -27,6 +28,7 @@ import com.urlxl.mail.mail.MailOutcome
 import com.urlxl.mail.mail.MailRepository
 import com.urlxl.mail.mail.MailRuntime
 import com.urlxl.mail.mail.userFacingMessage
+import com.urlxl.mail.push.PushNotificationDispatcher
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -36,7 +38,9 @@ class InboxActivity : AppCompatActivity() {
     private lateinit var keywordChipScroll: View
     private lateinit var keywordChips: ChipGroup
     private lateinit var bottomNav: BottomNavigationView
-    private lateinit var loadingSpinner: ProgressBar
+    private lateinit var loadingOverlay: View
+    private lateinit var loadingStatus: TextView
+    private lateinit var cancelLoading: View
     private lateinit var inboxRoot: View
     private lateinit var inboxContent: View
     private lateinit var adapter: EmailAdapter
@@ -49,11 +53,32 @@ class InboxActivity : AppCompatActivity() {
 
     private var selectedTab = KeywordTabs.ALL
     private var allEmails: List<Email> = emptyList()
+    private var pendingMessageId: String? = null
+    private var pendingSender: String? = null
+    private var pendingSubject: String? = null
+    private var pendingMessageDeadlineMs: Long = 0L
 
     private val refreshRunnable = object : Runnable {
         override fun run() {
             refreshInbox()
             scheduleNextRefresh()
+        }
+    }
+
+    // The backend can take a few seconds to make a just-pushed email available via the inbox
+    // fetch — a single refresh attempt right after the notification tap routinely misses it, so
+    // this keeps polling (bounded by pendingMessageDeadlineMs) instead of giving up immediately.
+    private val pendingMessagePollRunnable = Runnable { refreshInbox() }
+
+    private val emailDetailLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val removedId = result.data?.getStringExtra(EmailDetailActivity.EXTRA_REMOVED_EMAIL_ID)
+            if (removedId != null) {
+                allEmails = allEmails.filter { it.id != removedId }
+                renderFilteredEmails()
+            }
         }
     }
 
@@ -75,6 +100,23 @@ class InboxActivity : AppCompatActivity() {
         setupTabs()
         setupBottomNav()
         setupSwipeGestures()
+
+        val msgId = intent.getStringExtra(PushNotificationDispatcher.EXTRA_MESSAGE_ID)
+        if (msgId != null) {
+            setPendingMessage(
+                msgId,
+                intent.getStringExtra(PushNotificationDispatcher.EXTRA_SENDER),
+                intent.getStringExtra(PushNotificationDispatcher.EXTRA_SUBJECT),
+            )
+            currentFolder = "INBOX"
+        }
+    }
+
+    private fun setPendingMessage(msgId: String, sender: String?, subject: String?) {
+        pendingMessageId = msgId
+        pendingSender = sender
+        pendingSubject = subject
+        pendingMessageDeadlineMs = System.currentTimeMillis() + PENDING_MESSAGE_TIMEOUT_MS
     }
 
     private fun applyFolderTitle() {
@@ -111,6 +153,7 @@ class InboxActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         mainHandler.removeCallbacks(refreshRunnable)
+        mainHandler.removeCallbacks(pendingMessagePollRunnable)
     }
 
     override fun onDestroy() {
@@ -125,7 +168,15 @@ class InboxActivity : AppCompatActivity() {
         keywordChipScroll = findViewById(R.id.keywordChipScroll)
         keywordChips = findViewById(R.id.keywordChipGroup)
         bottomNav = findViewById(R.id.bottomNavigation)
-        loadingSpinner = findViewById(R.id.loadingSpinner)
+        loadingOverlay = findViewById(R.id.loadingOverlay)
+        loadingStatus = findViewById<TextView>(R.id.loadingStatus)
+        cancelLoading = findViewById(R.id.cancelLoading)
+
+        cancelLoading.setOnClickListener {
+            pendingMessageId = null
+            mainHandler.removeCallbacks(pendingMessagePollRunnable)
+            loadingOverlay.visibility = View.GONE
+        }
     }
 
     private fun applyInboxThemeChrome() {
@@ -172,18 +223,72 @@ class InboxActivity : AppCompatActivity() {
         return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val msgId = intent.getStringExtra(PushNotificationDispatcher.EXTRA_MESSAGE_ID)
+        if (msgId != null) {
+            setPendingMessage(
+                msgId,
+                intent.getStringExtra(PushNotificationDispatcher.EXTRA_SENDER),
+                intent.getStringExtra(PushNotificationDispatcher.EXTRA_SUBJECT),
+            )
+            currentFolder = "INBOX"
+            applyFolderTitle()
+            mainHandler.removeCallbacks(pendingMessagePollRunnable)
+            refreshInbox()
+        }
+    }
+
     private fun setupRecyclerView() {
         adapter = EmailAdapter(emptyList()) { email ->
-            val intent = Intent(this, EmailDetailActivity::class.java)
-            intent.putExtra("email_id", email.id)
-            intent.putExtra("email_subject", email.subject)
-            intent.putExtra("email_sender", email.sender)
-            intent.putExtra("email_preview", email.preview)
-            intent.putExtra("email_folder", currentFolder)
-            startActivity(intent)
+            openEmailDetail(email)
         }
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
+    }
+
+    private fun openEmailDetail(email: Email) {
+        val intent = Intent(this, EmailDetailActivity::class.java)
+        intent.putExtra("email_id", email.id)
+        intent.putExtra("email_subject", email.subject)
+        intent.putExtra("email_sender", email.sender)
+        intent.putExtra("email_preview", email.preview)
+        intent.putExtra("email_folder", currentFolder)
+        emailDetailLauncher.launch(intent)
+    }
+
+    private fun checkPendingMessage(emails: List<Email>, isFinal: Boolean = false) {
+        val id = pendingMessageId ?: return
+        
+        // Match by ID first, then fallback to fuzzy match by sender + subject if IDs don't match
+        // (common in IMAP where push messageId might be a server UUID but email.id is header Message-ID).
+        val email = emails.find { it.id == id } 
+            ?: emails.find { it.sender.contains(pendingSender ?: "", ignoreCase = true) && it.subject == pendingSubject }
+
+        if (email != null) {
+            pendingMessageId = null
+            pendingSender = null
+            pendingSubject = null
+            mainHandler.removeCallbacks(pendingMessagePollRunnable)
+            openEmailDetail(email)
+            return
+        }
+
+        if (!isFinal) return
+
+        if (System.currentTimeMillis() < pendingMessageDeadlineMs) {
+            // Not found on this attempt, but still within the deep-link wait window — the backend
+            // may not have indexed the just-arrived email yet. Poll again shortly instead of
+            // giving up after a single miss.
+            mainHandler.removeCallbacks(pendingMessagePollRunnable)
+            mainHandler.postDelayed(pendingMessagePollRunnable, PENDING_MESSAGE_POLL_INTERVAL_MS)
+        } else {
+            pendingMessageId = null
+            pendingSender = null
+            pendingSubject = null
+            Toast.makeText(this, R.string.email_not_found, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun setupTabs() {
@@ -208,19 +313,32 @@ class InboxActivity : AppCompatActivity() {
         // No emails held in memory yet (cold open, or a just-switched-to folder) — render the
         // Room cache immediately so the list isn't empty while the network round trip is in
         // flight, then let the fetch below overwrite it with fresh data.
-        val showCacheFirst = allEmails.isEmpty()
+        val showCacheFirst = allEmails.isEmpty() || pendingMessageId != null
         if (showCacheFirst) {
-            loadingSpinner.visibility = android.view.View.VISIBLE
+            loadingOverlay.visibility = android.view.View.VISIBLE
+            val status = if (pendingMessageId != null) {
+                val detail = if (!pendingSender.isNullOrBlank()) " from $pendingSender" else ""
+                getString(R.string.finding_email) + detail
+            } else {
+                getString(R.string.loading_emails)
+            }
+            loadingStatus.text = status
+            cancelLoading.visibility = if (pendingMessageId != null) View.VISIBLE else View.GONE
         }
         ioExecutor.execute {
             if (showCacheFirst) {
                 val cached = mailRepository.cachedEmails(currentFolder)
                 if (cached.isNotEmpty()) {
                     runOnUiThread {
-                        loadingSpinner.visibility = android.view.View.GONE
                         allEmails = cached
                         rebuildTabs(cached)
                         renderFilteredEmails()
+                        checkPendingMessage(cached, isFinal = false)
+                        // If we aren't waiting for a specific message (it was found in cache or 
+                        // this isn't a deep link), we can hide the overlay now.
+                        if (pendingMessageId == null) {
+                            loadingOverlay.visibility = android.view.View.GONE
+                        }
                     }
                 }
             }
@@ -230,10 +348,11 @@ class InboxActivity : AppCompatActivity() {
             val errorMessage = outcome.userFacingMessage()
             keywordSettings.rememberKeywords(emails.flatMap { it.keywords }.toSet())
             runOnUiThread {
-                loadingSpinner.visibility = android.view.View.GONE
+                loadingOverlay.visibility = android.view.View.GONE
                 allEmails = emails
                 rebuildTabs(emails)
                 renderFilteredEmails()
+                checkPendingMessage(emails, isFinal = true)
                 if (errorMessage != null) {
                     Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
                 }
@@ -487,6 +606,8 @@ class InboxActivity : AppCompatActivity() {
 
     companion object {
         private const val REFRESH_INTERVAL_MS = 90_000L
+        private const val PENDING_MESSAGE_POLL_INTERVAL_MS = 3_000L
+        private const val PENDING_MESSAGE_TIMEOUT_MS = 30_000L
         private const val MENU_KEYWORDS = 0
         private const val MENU_CONTACTS = 1
         private const val MENU_SETTINGS = 2

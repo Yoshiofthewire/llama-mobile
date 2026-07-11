@@ -117,4 +117,8 @@
     <string name="contacts_email_label">Email (optional)</string>
     <string name="contacts_phone_label">Phone (optional)</string>
     <string name="contacts_notes_label">Notes (optional)</string>
+
+    <string name="loading_emails">Syncing emails…</string>
+    <string name="finding_email">Finding new email…</string>
+    <string name="email_not_found">Email no longer available</string>
 </resources>
