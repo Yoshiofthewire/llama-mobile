@@ -16,6 +16,7 @@ class PushSyncCoordinator(
         if (result is NativeRegistrationResult.Success) {
             repository.savePairing(pairing.copy(deviceId = result.deviceId ?: pairing.deviceId))
             persistDelivery(pairing, result)
+            repository.updateTransport(result.transport)
             repository.updateSyncState(lastSyncAtEpochMs = result.syncedAtEpochMs, syncError = null)
         }
         return result
@@ -46,6 +47,7 @@ class PushSyncCoordinator(
             is NativeRegistrationResult.Success -> {
                 repository.savePairing(pairing.copy(deviceId = result.deviceId ?: pairing.deviceId))
                 persistDelivery(pairing, result)
+                repository.updateTransport(result.transport)
                 repository.updateSyncState(lastSyncAtEpochMs = result.syncedAtEpochMs, syncError = null)
             }
             is NativeRegistrationResult.Error -> repository.updateSyncState(lastSyncAtEpochMs = null, syncError = result.message)

@@ -25,6 +25,7 @@ private val KEY_DELIVERY_MODE = stringPreferencesKey("delivery_mode")
 private val KEY_PULL_ENDPOINT = stringPreferencesKey("pull_endpoint")
 private val KEY_PULL_CURSOR = longPreferencesKey("pull_cursor")
 private val KEY_PULL_CURSOR_SUB = stringPreferencesKey("pull_cursor_sub")
+private val KEY_TRANSPORT = stringPreferencesKey("transport")
 
 private const val HISTORY_LIMIT = 30
 
@@ -60,6 +61,7 @@ class PushRepository(private val context: Context) {
             prefs.remove(KEY_PULL_ENDPOINT)
             prefs.remove(KEY_PULL_CURSOR)
             prefs.remove(KEY_PULL_CURSOR_SUB)
+            prefs.remove(KEY_TRANSPORT)
         }
     }
 
@@ -68,6 +70,13 @@ class PushRepository(private val context: Context) {
         context.pushDataStore.edit { prefs ->
             prefs[KEY_DELIVERY_MODE] = mode.wire
             if (pullEndpoint.isNullOrBlank()) prefs.remove(KEY_PULL_ENDPOINT) else prefs[KEY_PULL_ENDPOINT] = pullEndpoint
+        }
+    }
+
+    /** Persist the transport the server confirmed for the last successful registration. */
+    suspend fun updateTransport(transport: String?) {
+        context.pushDataStore.edit { prefs ->
+            if (transport.isNullOrBlank()) prefs.remove(KEY_TRANSPORT) else prefs[KEY_TRANSPORT] = transport
         }
     }
 
@@ -112,6 +121,7 @@ class PushRepository(private val context: Context) {
             latestPayload = history.firstOrNull(),
             deliveryMode = DeliveryMode.fromWire(prefs[KEY_DELIVERY_MODE]),
             pullEndpoint = pullEndpoint,
+            transport = prefs[KEY_TRANSPORT],
         )
     }
 
@@ -129,4 +139,5 @@ data class PushState(
     val history: List<PushPayload>,
     val deliveryMode: DeliveryMode = DeliveryMode.PUSH,
     val pullEndpoint: String? = null,
+    val transport: String? = null,
 )

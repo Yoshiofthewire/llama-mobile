@@ -80,6 +80,8 @@
     <string name="push_pairing_history_title">Notification history</string>
     <string name="push_pairing_history_empty">No push notifications received yet</string>
     <string name="push_pairing_scan_qr">Scan QR Code</string>
+    <string name="push_pairing_use_unifiedpush">Use UnifiedPush</string>
+    <string name="push_pairing_use_firebase">Use Firebase</string>
 
     <string name="mfa_approval_title">Approve sign-in</string>
     <string name="mfa_approval_body">Someone is trying to sign in to your account. If this wasn\'t you, deny it.</string>

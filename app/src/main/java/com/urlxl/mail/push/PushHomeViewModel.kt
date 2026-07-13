@@ -1,5 +1,6 @@
 package com.urlxl.mail.push
 
+import android.app.Activity
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +34,7 @@ class PushHomeViewModel(application: Application) : AndroidViewModel(application
             latestPayload = repo.latestPayload,
             history = repo.history,
             deliveryMode = repo.deliveryMode,
+            transport = repo.transport,
             isWorking = working,
             localMessage = local,
         )
@@ -113,6 +115,39 @@ class PushHomeViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * Switches this device to UnifiedPush: triggers the distributor picker (via
+     * [UnifiedPushRegistrar]) and requests registration. The endpoint itself arrives
+     * asynchronously via LlamaUnifiedPushService.onNewEndpoint, which completes the
+     * server registration — this call only starts that flow and reports whether it
+     * was successfully kicked off.
+     */
+    fun switchToUnifiedPush(activity: Activity) {
+        isWorking.value = true
+        UnifiedPushRegistrar.beginRegistration(activity) { success, error ->
+            isWorking.value = false
+            localMessage.value = if (success) {
+                "Switching to UnifiedPush — waiting for the distributor to confirm"
+            } else {
+                error ?: "UnifiedPush setup was canceled"
+            }
+        }
+    }
+
+    /** Switches this device back to Firebase and unregisters from the UnifiedPush distributor. */
+    fun switchToFirebase() {
+        scope.launch {
+            isWorking.value = true
+            UnifiedPushRegistrar.unregister(getApplication())
+            val result = graph.syncCoordinator.syncCurrentPairingToken()
+            localMessage.value = when (result) {
+                is NativeRegistrationResult.Success -> "Switched to Firebase"
+                is NativeRegistrationResult.Error -> "Failed to switch to Firebase: ${result.message}"
+            }
+            isWorking.value = false
+        }
+    }
+
     fun resyncToken() {
         scope.launch {
             isWorking.value = true
@@ -144,6 +179,7 @@ data class PushHomeUiState(
     val latestPayload: PushPayload? = null,
     val history: List<PushPayload> = emptyList(),
     val deliveryMode: DeliveryMode = DeliveryMode.PUSH,
+    val transport: String? = null,
     val isWorking: Boolean = false,
     val localMessage: String? = null,
 )

@@ -46,6 +46,16 @@ android {
 
 }
 
+configurations.all {
+    // androidx.security.crypto (used by SecurePairingStore) and the UnifiedPush connector
+    // both pull in Google's tink crypto library — the former via tink-android, the latter
+    // via plain tink. Both jars ship identical com.google.crypto.tink.* classes, so having
+    // both on the classpath is a duplicate-class build failure, not a real version conflict;
+    // excluding the plain jar and keeping tink-android (already required by security.crypto)
+    // is the fix the connector's own docs recommend.
+    exclude(group = "com.google.crypto.tink", module = "tink")
+}
+
 dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
@@ -60,7 +70,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation(platform("com.google.firebase:firebase-bom:34.2.0"))
     implementation("com.google.firebase:firebase-messaging")
-    implementation("org.unifiedpush.android:connector:2.6.0")
+    implementation("org.unifiedpush.android:connector:3.3.3")
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     implementation("com.github.infomaniak:android-rich-html-editor:1.1.0")
 

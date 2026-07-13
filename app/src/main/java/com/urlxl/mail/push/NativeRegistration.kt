@@ -38,6 +38,10 @@ data class NativeRegistrationResponse(
     // when in pull mode. Both may be absent on older servers.
     @SerialName("deliveryMode") val deliveryMode: String? = null,
     @SerialName("pullEndpoint") val pullEndpoint: String? = null,
+    // The transport the server actually stored ("fcm" | "apns" | "unifiedpush"), echoed back
+    // so the client displays an authoritative value rather than just assuming its request won.
+    // Absent on older servers.
+    @SerialName("transport") val transport: String? = null,
 )
 
 /**
@@ -72,6 +76,7 @@ sealed class NativeRegistrationResult {
         val deviceId: String?,
         val deliveryMode: DeliveryMode = DeliveryMode.PUSH,
         val pullEndpoint: String? = null,
+        val transport: String? = null,
     ) : NativeRegistrationResult()
     data class Error(val message: String, val expiredPairingToken: Boolean = false) : NativeRegistrationResult()
 }
@@ -109,6 +114,7 @@ class NativeRegistrationClient(
                         deviceId = body.deviceId,
                         deliveryMode = DeliveryMode.fromWire(body.deliveryMode),
                         pullEndpoint = body.pullEndpoint,
+                        transport = body.transport,
                     )
                 } else {
                     NativeRegistrationResult.Error("Registration did not confirm sync")
