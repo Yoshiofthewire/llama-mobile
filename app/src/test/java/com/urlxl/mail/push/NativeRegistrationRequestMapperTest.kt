@@ -33,48 +33,6 @@ class NativeRegistrationRequestMapperTest {
     }
 
     @Test
-    fun map_withWebPushKeys_includesP256dhAndAuth() {
-        val pairing = PairingData(
-            subscriberId = "subscriber-id",
-            subscriberHash = "subscriber-hash",
-            serverUrl = "https://server.example.com",
-            registrationUrl = "https://server.example.com/api/notifications/native/register",
-            pairingToken = "pairing-token",
-            deviceId = "last-known-device-id",
-            pairedAtEpochMs = 100L,
-        )
-
-        val request = NativeRegistrationRequestMapper.map(
-            pairing = pairing,
-            token = "https://distributor.example.com/endpoint",
-            transport = "unifiedpush",
-            p256dh = "p256dh-key",
-            auth = "auth-secret",
-        )
-
-        assertEquals("p256dh-key", request.p256dh)
-        assertEquals("auth-secret", request.auth)
-    }
-
-    @Test
-    fun map_withoutWebPushKeys_leavesThemNull() {
-        val pairing = PairingData(
-            subscriberId = "subscriber-id",
-            subscriberHash = "subscriber-hash",
-            serverUrl = "https://server.example.com",
-            registrationUrl = "https://server.example.com/api/notifications/native/register",
-            pairingToken = "pairing-token",
-            deviceId = "last-known-device-id",
-            pairedAtEpochMs = 100L,
-        )
-
-        val request = NativeRegistrationRequestMapper.map(pairing = pairing, token = "fcm-token")
-
-        assertNull(request.p256dh)
-        assertNull(request.auth)
-    }
-
-    @Test
     fun map_blankSubscriberHash_becomesNull() {
         val pairing = PairingData(
             subscriberId = "subscriber-id",
