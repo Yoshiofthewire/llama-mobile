@@ -27,6 +27,11 @@ data class NativeRegistrationRequest(
     @SerialName("transport") val transport: String? = null,
     @SerialName("deviceName") val deviceName: String?,
     @SerialName("appVersion") val appVersion: String?,
+    // WebPush encryption key material (RFC 8291), present only for transport="unifiedpush".
+    // The server needs these to encrypt payloads so the UnifiedPush connector can decrypt them;
+    // without them, messages arrive as undecryptable ciphertext.
+    @SerialName("p256dh") val p256dh: String? = null,
+    @SerialName("auth") val auth: String? = null,
 )
 
 @Serializable
@@ -55,7 +60,13 @@ fun resolvePullEndpoint(serverUrl: String, provided: String?): String {
 }
 
 object NativeRegistrationRequestMapper {
-    fun map(pairing: PairingData, token: String, transport: String? = null): NativeRegistrationRequest {
+    fun map(
+        pairing: PairingData,
+        token: String,
+        transport: String? = null,
+        p256dh: String? = null,
+        auth: String? = null,
+    ): NativeRegistrationRequest {
         return NativeRegistrationRequest(
             subscriberId = pairing.subscriberId,
             subscriberHash = pairing.subscriberHash.takeIf { it.isNotBlank() },
@@ -66,6 +77,8 @@ object NativeRegistrationRequestMapper {
             transport = transport,
             deviceName = Build.MODEL,
             appVersion = "llama Mail for Android v$APP_VERSION",
+            p256dh = p256dh,
+            auth = auth,
         )
     }
 }
@@ -90,10 +103,18 @@ class NativeRegistrationClient(
         token: String,
         nowEpochMs: Long = System.currentTimeMillis(),
         transport: String? = null,
+        p256dh: String? = null,
+        auth: String? = null,
     ): NativeRegistrationResult {
         if (token.isBlank()) return NativeRegistrationResult.Error("FCM token is empty")
 
-        val request = NativeRegistrationRequestMapper.map(pairing = pairing, token = token, transport = transport)
+        val request = NativeRegistrationRequestMapper.map(
+            pairing = pairing,
+            token = token,
+            transport = transport,
+            p256dh = p256dh,
+            auth = auth,
+        )
         val httpRequest = Request.Builder()
             .url(pairing.registrationUrl)
             .post(json.encodeToString(request).toRequestBody(JSON_MEDIA_TYPE))
