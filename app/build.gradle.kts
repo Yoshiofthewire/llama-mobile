@@ -60,6 +60,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation(platform("com.google.firebase:firebase-bom:34.2.0"))
     implementation("com.google.firebase:firebase-messaging")
+    implementation("org.unifiedpush.android:connector:2.6.0")
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     implementation("com.github.infomaniak:android-rich-html-editor:1.1.0")
 

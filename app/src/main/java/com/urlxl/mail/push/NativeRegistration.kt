@@ -24,6 +24,7 @@ data class NativeRegistrationRequest(
     @SerialName("deviceToken") val deviceToken: String,
     @SerialName("deviceId") val deviceId: String?,
     @SerialName("platform") val platform: String,
+    @SerialName("transport") val transport: String? = null,
     @SerialName("deviceName") val deviceName: String?,
     @SerialName("appVersion") val appVersion: String?,
 )
@@ -50,7 +51,7 @@ fun resolvePullEndpoint(serverUrl: String, provided: String?): String {
 }
 
 object NativeRegistrationRequestMapper {
-    fun map(pairing: PairingData, token: String): NativeRegistrationRequest {
+    fun map(pairing: PairingData, token: String, transport: String? = null): NativeRegistrationRequest {
         return NativeRegistrationRequest(
             subscriberId = pairing.subscriberId,
             subscriberHash = pairing.subscriberHash.takeIf { it.isNotBlank() },
@@ -58,6 +59,7 @@ object NativeRegistrationRequestMapper {
             deviceToken = token,
             deviceId = pairing.deviceId,
             platform = "android",
+            transport = transport,
             deviceName = Build.MODEL,
             appVersion = "llama Mail for Android v$APP_VERSION",
         )
@@ -82,10 +84,11 @@ class NativeRegistrationClient(
         pairing: PairingData,
         token: String,
         nowEpochMs: Long = System.currentTimeMillis(),
+        transport: String? = null,
     ): NativeRegistrationResult {
         if (token.isBlank()) return NativeRegistrationResult.Error("FCM token is empty")
 
-        val request = NativeRegistrationRequestMapper.map(pairing = pairing, token = token)
+        val request = NativeRegistrationRequestMapper.map(pairing = pairing, token = token, transport = transport)
         val httpRequest = Request.Builder()
             .url(pairing.registrationUrl)
             .post(json.encodeToString(request).toRequestBody(JSON_MEDIA_TYPE))
