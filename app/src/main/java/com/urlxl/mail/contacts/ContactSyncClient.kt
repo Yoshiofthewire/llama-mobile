@@ -139,7 +139,9 @@ class ContactSyncClient(
             callFactory.executeSync(request) { response -> response.code to response.body?.string().orEmpty() }
         }
         val (code, rawBody) = result.getOrNull()
-            ?: return HttpMappedResult.Retryable(result.exceptionOrNull()?.message ?: "Network error during $failureMessagePrefix")
+            ?: return HttpMappedResult.Retryable(
+                result.exceptionOrNull()?.message ?: "$failureMessagePrefix: network error",
+            )
 
         return when (code) {
             200 -> decode(rawBody)?.let { HttpMappedResult.Success(it) } ?: HttpMappedResult.Retryable(malformedMessage)

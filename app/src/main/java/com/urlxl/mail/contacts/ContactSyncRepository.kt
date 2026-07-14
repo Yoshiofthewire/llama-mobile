@@ -76,15 +76,8 @@ class ContactSyncRepository(
      * [sync]'s single-purpose shape; the caller is responsible for triggering a follow-up sync so
      * the merge's tombstones/survivor land locally.
      */
-    suspend fun dedupe(): ContactDedupeOutcome {
-        val pairing = pairingProvider() ?: return ContactDedupeOutcome.NotPaired
-        return when (val result = client.dedupe(pairing.serverUrl, pairing.subscriberId, pairing.subscriberHash)) {
-            is ContactDedupeResult.Success -> ContactDedupeOutcome.Success(result.report)
-            is ContactDedupeResult.Unauthorized -> ContactDedupeOutcome.Unauthorized
-            is ContactDedupeResult.ServiceUnavailable -> ContactDedupeOutcome.ServiceUnavailable(result.message)
-            is ContactDedupeResult.BadRequest -> ContactDedupeOutcome.Retry(result.message)
-            is ContactDedupeResult.Retryable -> ContactDedupeOutcome.Retry(result.message)
-        }
+    suspend fun dedupe(): ContactDedupeOutcome = resolveDedupeOutcome(pairingProvider) { pairing ->
+        client.dedupe(pairing.serverUrl, pairing.subscriberId, pairing.subscriberHash)
     }
 
     /** Creates locally under a temp uid and enqueues the create; reconciled to a server uid on sync. */
@@ -171,4 +164,31 @@ class ContactSyncRepository(
         const val CHANGE_UPDATE = "update"
         const val CHANGE_DELETE = "delete"
     }
+}
+
+/**
+ * Decides [ContactSyncRepository.dedupe]'s outcome: [ContactDedupeOutcome.NotPaired] if
+ * [pairingProvider] yields no pairing, otherwise delegates to [dedupeCall] and maps its result via
+ * [contactDedupeOutcomeOf]. Kept as a standalone function, independent of
+ * [ContactSyncRepository]'s `AppDatabase`/`ContactCursorStore` dependencies, so it's testable in a
+ * plain JVM unit test — mirrors [com.urlxl.mail.mail.reconcileFetchResult]'s extraction for the
+ * same reason.
+ */
+internal suspend fun resolveDedupeOutcome(
+    pairingProvider: suspend () -> PairingData?,
+    dedupeCall: suspend (PairingData) -> ContactDedupeResult,
+): ContactDedupeOutcome {
+    val pairing = pairingProvider() ?: return ContactDedupeOutcome.NotPaired
+    return contactDedupeOutcomeOf(dedupeCall(pairing))
+}
+
+/** Pure mapping from [ContactDedupeResult] to [ContactDedupeOutcome]; `BadRequest` folds into
+ * [ContactDedupeOutcome.Retry], matching how [ContactSyncRepository.sync] folds
+ * `ContactSyncResult.BadRequest` into `ContactSyncOutcome.Retry`. */
+internal fun contactDedupeOutcomeOf(result: ContactDedupeResult): ContactDedupeOutcome = when (result) {
+    is ContactDedupeResult.Success -> ContactDedupeOutcome.Success(result.report)
+    is ContactDedupeResult.Unauthorized -> ContactDedupeOutcome.Unauthorized
+    is ContactDedupeResult.ServiceUnavailable -> ContactDedupeOutcome.ServiceUnavailable(result.message)
+    is ContactDedupeResult.BadRequest -> ContactDedupeOutcome.Retry(result.message)
+    is ContactDedupeResult.Retryable -> ContactDedupeOutcome.Retry(result.message)
 }
