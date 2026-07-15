@@ -20,6 +20,7 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.infomaniak.lib.richhtmleditor.RichHtmlEditorWebView
 import com.urlxl.mail.contacts.AddressBookSheet
+import com.urlxl.mail.contacts.RecipientCandidate
 import com.urlxl.mail.contacts.RecipientField
 import com.urlxl.mail.contacts.toRecipientCandidateOrNull
 import com.urlxl.mail.data.DataRuntime
@@ -93,7 +94,7 @@ class ComposeActivity : AppCompatActivity() {
         bccInput.setLabel(getString(R.string.email_bcc))
 
         val contactDao = DataRuntime.graph(this).database.contactDao()
-        val searchContacts: suspend (String) -> List<com.urlxl.mail.contacts.RecipientCandidate> = { query ->
+        val searchContacts: suspend (String) -> List<RecipientCandidate> = { query ->
             contactDao.search(query).mapNotNull { it.toRecipientCandidateOrNull() }
         }
         toInput.configure(searchContacts, onOpenAddressBook = ::openAddressBook)

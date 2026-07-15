@@ -21,8 +21,8 @@ import kotlinx.coroutines.launch
 /** Address-book picker (ContactAutocomplete.md section 3): search bar + scrollable contact list
  *  with TO/CC/BCC action chips per row. Stays open across picks so the user can multi-select —
  *  [onPick] fires once per successful pick; see [RecipientRowAdapter] for the checkmark state. */
-class AddressBookSheet(
-    private val onPick: (RecipientCandidate, RecipientField) -> Boolean,
+class AddressBookSheet @JvmOverloads constructor(
+    private val onPick: ((RecipientCandidate, RecipientField) -> Boolean)? = null,
 ) : BottomSheetDialogFragment() {
 
     private lateinit var adapter: RecipientRowAdapter
@@ -36,6 +36,10 @@ class AddressBookSheet(
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val onPick = onPick ?: run {
+            dismiss()
+            return
+        }
         val searchField = view.findViewById<EditText>(R.id.addressBookSearchField)
         val recyclerView = view.findViewById<RecyclerView>(R.id.addressBookRecyclerView)
         emptyText = view.findViewById(R.id.addressBookEmptyText)
