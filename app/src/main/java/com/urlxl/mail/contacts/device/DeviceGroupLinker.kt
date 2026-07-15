@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.provider.ContactsContract
 import com.urlxl.mail.data.AppDatabase
+import com.urlxl.mail.data.GroupEntity
 import com.urlxl.mail.data.GroupLinkEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -81,7 +82,15 @@ class DeviceGroupLinker(
         return resultUri.lastPathSegment?.toLongOrNull()
     }
 
-    private fun renameIfNeeded(androidGroupRowId: Long, groupName: String) {
+    /**
+     * Renames the on-device `Groups.TITLE` for [androidGroupRowId] to [groupName] in place, if
+     * it differs from the current on-device title. Public (not just called from
+     * [ensureAndroidGroupRowId]) so [com.urlxl.mail.contacts.GroupSyncRepository]'s regular
+     * full-refresh sync cycle can also invoke it for every *already-linked* group -- the plan's
+     * Part 2 point 4 requires a backend group rename to reach the device on the next sync, not
+     * only when a brand-new not-yet-linked contact happens to reference that group.
+     */
+    suspend fun renameIfNeeded(androidGroupRowId: Long, groupName: String) = withContext(Dispatchers.IO) {
         val currentTitle = contentResolver.query(
             ContactsContract.Groups.CONTENT_URI,
             arrayOf(ContactsContract.Groups.TITLE),
@@ -102,6 +111,21 @@ class DeviceGroupLinker(
             }
         }
     }
+}
+
+/**
+ * Pure join: for every [links] entry whose backend group still exists in the freshly-synced
+ * [groups] cache, resolves the (androidGroupRowId, freshName) pair that should be passed to
+ * [DeviceGroupLinker.renameIfNeeded]. A link whose group was deleted from the backend (and thus
+ * dropped from [groups] by [com.urlxl.mail.contacts.GroupSyncRepository]'s full refresh) is
+ * skipped -- there's no fresh name to rename to. Extracted as a standalone pure function so the
+ * "which already-linked groups need a rename pass" decision is unit-testable without a real
+ * `ContentResolver`; the actual current-title comparison and write happen inside
+ * [DeviceGroupLinker.renameIfNeeded] itself.
+ */
+internal fun groupRenameTargets(links: List<GroupLinkEntity>, groups: List<GroupEntity>): List<Pair<Long, String>> {
+    val groupsById = groups.associateBy { it.id }
+    return links.mapNotNull { link -> groupsById[link.groupId]?.let { link.androidGroupRowId to it.name } }
 }
 
 /** Pure find-or-create decision: does any existing on-device group (scoped to our account)

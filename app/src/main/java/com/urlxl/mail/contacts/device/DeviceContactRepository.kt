@@ -30,6 +30,7 @@ class DeviceContactRepository(
     suspend fun syncAll() {
         try {
             groupSyncRepository.sync()
+            reconcileGroupRenames()
         } catch (e: Exception) {
             android.util.Log.e("DeviceContactSync", "Error refreshing groups cache", e)
         }
@@ -47,6 +48,23 @@ class DeviceContactRepository(
             pushRoomChangesToDevice()
         } catch (e: Exception) {
             android.util.Log.e("DeviceContactSync", "Error pushing to device", e)
+        }
+    }
+
+    /**
+     * Propagates a backend group rename to the on-device `Groups.TITLE` for every group that's
+     * already linked (materialized on-device via a prior sync), not just groups referenced by a
+     * brand-new not-yet-linked contact ([createRawContactForDto]'s own
+     * `groupLinker.ensureAndroidGroupRowId` call already handles that narrower case). Runs on
+     * every `syncAll()` cycle right after [groupSyncRepository]'s full refresh has updated the
+     * Room [com.urlxl.mail.data.GroupEntity] cache with the latest backend names.
+     */
+    private suspend fun reconcileGroupRenames() = withContext(Dispatchers.IO) {
+        val links = db.groupLinkDao().getAll()
+        if (links.isEmpty()) return@withContext
+        val groups = db.groupDao().getAll()
+        for ((androidGroupRowId, freshName) in groupRenameTargets(links, groups)) {
+            groupLinker.renameIfNeeded(androidGroupRowId, freshName)
         }
     }
 
