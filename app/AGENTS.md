@@ -29,6 +29,13 @@ Owns the Android app module build, manifest, source sets, resources, and test ex
 - Prefer one existing dependency for both IMAP and SMTP.
 - Avoid hardcoded secrets in committed files.
 - For user-visible behavior changes, update this file or a closer child AGENTS.md.
+- Contact autocomplete (ContactAutocomplete.md): `ComposeActivity`'s TO/CC/BCC fields are
+  `RecipientInputView`s backed by `ContactDao.search` (name/email substring match, debounced
+  150ms, top 5 shown). The address-book icon on the TO row opens `AddressBookSheet`
+  (`contacts/` package), a `BottomSheetDialogFragment` offering TO/CC/BCC actions per contact.
+  Both surfaces share `RecipientCandidate`/`RecipientField`/matching logic in
+  `contacts/RecipientMatching.kt` — extend that file, don't duplicate matching logic in either UI
+  layer.
 
 # Work Guidance
 
