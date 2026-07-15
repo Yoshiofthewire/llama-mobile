@@ -49,7 +49,7 @@ class RecipientMatchingTest {
     @Test
     fun matchRanges_findsFirstCaseInsensitiveOccurrence() {
         assertEquals(listOf(0..1), matchRanges("Ada Lovelace", "ad"))
-        assertEquals(listOf(4..12), matchRanges("Ada Lovelace", "Lovelace"))
+        assertEquals(listOf(4..11), matchRanges("Ada Lovelace", "Lovelace"))
         assertEquals(emptyList<IntRange>(), matchRanges("Ada Lovelace", "zz"))
         assertEquals(emptyList<IntRange>(), matchRanges("Ada Lovelace", ""))
     }
