@@ -207,6 +207,18 @@ fun applyDangerButtonTheme(context: Context, button: Button) {
     button.setTextColor(Color.parseColor(COLOR_DANGER_ACTION_TEXT))
 }
 
+/** Success/"added" state for the address-book picker's TO/CC/BCC action chips — mirrors
+ *  [applyDangerButtonTheme]'s stroke+fill shape (STYLE_GUIDE.md §4's danger-button pattern is the
+ *  closest documented precedent for a colored actionable state) using [COLOR_SUCCESS_BORDER]/
+ *  [COLOR_SUCCESS_TEXT] (STYLE_GUIDE.md §1) instead of the danger palette. */
+fun applySuccessChipTheme(context: Context, chip: com.google.android.material.chip.Chip) {
+    val border = Color.parseColor(COLOR_SUCCESS_BORDER)
+    chip.chipBackgroundColor = android.content.res.ColorStateList.valueOf(withAlpha(border, 0.12f))
+    chip.chipStrokeColor = android.content.res.ColorStateList.valueOf(border)
+    chip.chipStrokeWidth = 1f * context.resources.displayMetrics.density
+    chip.setTextColor(Color.parseColor(COLOR_SUCCESS_TEXT))
+}
+
 /** Small uppercase, letter-spaced, 72%-opacity `inkStrong` label — mirrors web's
  *  `.sidebar-section-label` / `.contact-details-section-title`. Group headers only, not body
  *  copy or per-field captions. */

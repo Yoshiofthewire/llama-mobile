@@ -76,6 +76,10 @@
     <string name="recipient_duplicate_toast">%1$s is already added</string>
     <string name="recipient_invalid_email_toast">Enter a valid email address</string>
     <string name="compose_address_book_content_description">Open address book</string>
+    <string name="address_book_search_hint">Search contacts</string>
+    <string name="address_book_action_to">TO</string>
+    <string name="address_book_action_cc">CC</string>
+    <string name="address_book_action_bcc">BCC</string>
 
     <string name="push_pairing_title">Push Notifications</string>
     <string name="push_pairing_status_paired">Paired</string>
