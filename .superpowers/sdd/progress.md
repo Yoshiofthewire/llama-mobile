@@ -1,25 +1,32 @@
-# Navigation Redesign Progress Ledger
+# Panel Radius Token Progress Ledger
 
-**Plan:** docs/superpowers/plans/2026-07-11-navigation-redesign.md
-**Base commit:** da00565
-**Start date:** 2026-07-11
+**Plan:** docs/superpowers/plans/2026-07-15-panel-radius-token.md
+**Base commit:** 12c73e0
+**Start date:** 2026-07-15
 
 ## Tasks
 
-- [x] Task 1: Update bottom navigation menu
-- [x] Task 2: Remove Contacts from Settings menu
-- [x] Task 3: Add Contacts handler to bottom navigation
-- [x] Task 4: Add header folder dropdown method
-- [x] Task 5: Make header title clickable and add dropdown affordance
-- [x] Task 6: Manual testing of navigation flows
+- [x] Task 1: Add the `card_corner_radius` dimension resource
+- [x] Task 2: Reference the dimension from all five card layouts
+- [x] Task 3: Add `AppTheme.applyPanelBackground` and use it in `InboxActivity`
+- [x] Task 4: Update STYLE_GUIDE.md §3 to record the closed gap
 
 ## Completed
 
-- Task 1: complete (commit 31e465b, spec ✅ quality ✅)
-- Task 2: complete (commit 0fd710c, spec ✅ quality ✅)
-- Task 3: complete (commit 848d610, spec ✅ quality ✅)
-- Task 4: complete (commit bddc73b, spec ✅ quality ✅)
-- Task 5: complete (commit 09777de, spec ✅ quality ✅)
-- Task 6: complete (testing: code review ✅, build ✅, UI testing blocked by pairing requirement)
+- Task 1: complete (commit 07c484a, spec ✅ quality ✅)
+- Task 2: complete (commit 1a33415, spec ✅ quality ✅)
+- Task 3: complete (commit e9104ba, spec ✅ quality ✅; implementer self-corrected a wrong brief assumption re: GradientDrawable import, verified by reviewer)
+- Task 4: complete (commit 2df7535, spec ✅ quality ✅)
 
-## All Tasks Complete - Ready for Final Review
+## Final Whole-Branch Review
+
+Ready to merge: Yes. No Critical/Important issues. One Minor note (AboutDialog.kt:129's
+separate field-styled `14f * density` literal is a defensible out-of-scope item, not a
+defect) — logged, no fix dispatched per skill guidance (Minor items don't block).
+
+## All Tasks Complete - Ready to Finish
+
+## Prior plan (complete, superseded by this ledger)
+
+Navigation Redesign (docs/superpowers/plans/2026-07-11-navigation-redesign.md) — all 6
+tasks complete as of 2026-07-11, see git log for commits 31e465b..09777de.
