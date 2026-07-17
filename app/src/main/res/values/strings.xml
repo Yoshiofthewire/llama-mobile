@@ -26,6 +26,7 @@
     <string name="nav_contacts">Contacts</string>
     <string name="nav_junk">Junk</string>
     <string name="nav_trash">Trash</string>
+    <string name="nav_archive">Archive</string>
 
     <string name="email_title">Email</string>
     <string name="email_from">From:</string>
@@ -117,6 +118,7 @@
 
     <string name="loading_emails">Syncing emails…</string>
     <string name="finding_email">Finding new email…</string>
+    <string name="no_archive_folders">No archive folders found</string>
     <string name="email_not_found">Email no longer available</string>
 
     <string name="contacts_device_sync_enable">Enable device contact sync</string>

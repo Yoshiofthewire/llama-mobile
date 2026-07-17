@@ -57,6 +57,8 @@ class MailRepository(
 
     fun send(draft: MailDraft): MailOutcome<MailSendOutcome> = relaySource.sendMail(draft)
 
+    fun listFolders(parent: String?): MailOutcome<FolderListResult> = relaySource.listFolders(parent)
+
     fun listAttachments(id: String, folder: String): MailOutcome<List<AttachmentInfo>> =
         relaySource.listAttachments(id, folder)
 

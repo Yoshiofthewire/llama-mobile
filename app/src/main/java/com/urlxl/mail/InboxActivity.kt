@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
+import com.urlxl.mail.mail.FolderInfo
 import com.urlxl.mail.mail.MailFetchResult
 import com.urlxl.mail.mail.MailOutcome
 import com.urlxl.mail.mail.MailRepository
@@ -131,9 +132,10 @@ class InboxActivity : AppCompatActivity() {
     }
 
     private fun applyFolderTitle() {
-        val folderLabel = when (currentFolder) {
-            "Junk" -> getString(R.string.nav_junk)
-            "Trash" -> getString(R.string.nav_trash)
+        val folderLabel = when {
+            currentFolder == "Junk" -> getString(R.string.nav_junk)
+            currentFolder == "Trash" -> getString(R.string.nav_trash)
+            currentFolder.startsWith("$ARCHIVE_PARENT_FOLDER/") -> currentFolder.substringAfterLast('/')
             else -> getString(R.string.nav_inbox)
         }
         val title = getString(R.string.inbox_heading, folderLabel)
@@ -476,23 +478,65 @@ class InboxActivity : AppCompatActivity() {
         }
     }
 
+    private fun switchFolder(folder: String) {
+        currentFolder = folder
+        selectedTab = KeywordTabs.ALL
+        applyFolderTitle()
+        refreshInbox()
+    }
+
     private fun showFolderPickerPopup(anchor: View) {
         val popupMenu = PopupMenu(this, anchor)
         popupMenu.menu.add(0, 0, 0, getString(R.string.nav_inbox))
         popupMenu.menu.add(0, 1, 1, getString(R.string.nav_junk))
         popupMenu.menu.add(0, 2, 2, getString(R.string.nav_trash))
+        popupMenu.menu.add(0, 3, 3, getString(R.string.nav_archive))
 
         popupMenu.setOnMenuItemClickListener { menuItem ->
             val folder = when (menuItem.itemId) {
                 0 -> "INBOX"
                 1 -> "Junk"
                 2 -> "Trash"
+                3 -> {
+                    fetchAndShowArchiveSubfolders(anchor)
+                    return@setOnMenuItemClickListener true
+                }
                 else -> return@setOnMenuItemClickListener false
             }
-            currentFolder = folder
-            selectedTab = KeywordTabs.ALL
-            applyFolderTitle()
-            refreshInbox()
+            switchFolder(folder)
+            true
+        }
+        popupMenu.show()
+    }
+
+    private fun fetchAndShowArchiveSubfolders(anchor: View) {
+        ioExecutor.execute {
+            val outcome = mailRepository.listFolders(ARCHIVE_PARENT_FOLDER)
+            runOnUiThread {
+                if (outcome is MailOutcome.Success) {
+                    showArchiveSubfoldersPopup(anchor, outcome.value.folders)
+                } else {
+                    val errorMessage = outcome.userFacingMessage()
+                    if (errorMessage != null) {
+                        Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showArchiveSubfoldersPopup(anchor: View, folders: List<FolderInfo>) {
+        if (folders.isEmpty()) {
+            Toast.makeText(this, R.string.no_archive_folders, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val popupMenu = PopupMenu(this, anchor)
+        folders.forEachIndexed { index, folder ->
+            popupMenu.menu.add(0, index, index, folder.path.substringAfterLast('/'))
+        }
+        popupMenu.setOnMenuItemClickListener { menuItem ->
+            val folder = folders.getOrNull(menuItem.itemId) ?: return@setOnMenuItemClickListener false
+            switchFolder(folder.path)
             true
         }
         popupMenu.show()
@@ -645,6 +689,7 @@ class InboxActivity : AppCompatActivity() {
         private const val REFRESH_INTERVAL_MS = 90_000L
         private const val PENDING_MESSAGE_POLL_INTERVAL_MS = 3_000L
         private const val PENDING_MESSAGE_TIMEOUT_MS = 30_000L
+        private const val ARCHIVE_PARENT_FOLDER = "Archive"
         private const val MENU_PGP_KEY = 0
         private const val MENU_KEYWORDS = 1
         private const val MENU_THEMES = 2
