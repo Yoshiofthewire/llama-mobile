@@ -54,6 +54,13 @@ class InboxActivity : AppCompatActivity() {
     private var lastAppliedThemeName: String = ""
 
     private var selectedTab = KeywordTabs.ALL
+    // BottomNavigationView routes setSelectedItemId() through the RESELECTED listener (not the
+    // SELECTED listener) whenever the target item is already selected — and nav_inbox is always
+    // the selected item here, since nav_compose/nav_contacts return false to avoid stealing
+    // selection (see the comment on that below). So both listener branches below must check this
+    // flag, and it must be raised around every programmatic `bottomNav.selectedItemId = R.id.nav_inbox`
+    // assignment, or that assignment re-enters the reselected listener and reopens the popup
+    // (this broke cold launch and post-pick behavior before this flag was added).
     private var suppressFolderPickerReentry = false
     private var allEmails: List<Email> = emptyList()
     private var pendingMessageId: String? = null
@@ -526,8 +533,11 @@ class InboxActivity : AppCompatActivity() {
             }
         }
         suppressFolderPickerReentry = true
-        bottomNav.selectedItemId = R.id.nav_inbox
-        suppressFolderPickerReentry = false
+        try {
+            bottomNav.selectedItemId = R.id.nav_inbox
+        } finally {
+            suppressFolderPickerReentry = false
+        }
     }
 
     private fun setupSwipeGestures() {
