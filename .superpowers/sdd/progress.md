@@ -1,55 +1,50 @@
-# Inbox Folder Nav Progress Ledger
+# Archive Subfolder Menu Progress Ledger
 
-**Plan:** docs/superpowers/plans/2026-07-17-inbox-folder-nav.md
-**Spec:** docs/superpowers/specs/2026-07-17-inbox-folder-nav-design.md
-**Base commit:** b1c8758
+**Plan:** docs/superpowers/plans/2026-07-17-archive-subfolder-menu.md
+**Spec:** docs/superpowers/specs/2026-07-17-archive-subfolder-menu-design.md
+**Base commit:** f3d6320
 **Start date:** 2026-07-17
 
 ## Tasks
 
-- [x] Task 1: Add the folder-picker popup to the Inbox tab
-- [x] Task 2: Remove the header dropdown
+- [x] Task 1: Archive item, subfolder fetch, and second popup
 
 ## Completed
 
-- Task 1: complete (commits b1c8758..97f6ef3, spec ✅ quality ✅). First review found a
-  Critical bug not caused by the implementer: the brief's `isInitialSelection` guard only
-  covered `OnItemSelectedListener`, but `BottomNavigationView` routes `setSelectedItemId()`
-  through `OnItemReselectedListener` whenever the target is already selected — and
-  `nav_inbox` is *always* selected in this app (Compose/Contacts return `false`). This made
-  the popup fire on cold launch and reopen after every folder pick. Fixed by replacing the
-  local flag with a class-level `suppressFolderPickerReentry` that guards both listener
-  branches and both programmatic `selectedItemId` assignments (in `showFolderPickerPopup`
-  and `setupBottomNav`). Re-review verified the fix against decompiled Material bytecode:
-  Approved. Minor findings logged for final review: no try/finally around the flag window
-  (`InboxActivity.kt` in `showFolderPickerPopup` and `setupBottomNav`), and the 3-line
-  suppress-flag pattern is duplicated at both call sites — a small helper could dedupe it.
-
-- Task 2: complete (commits 97f6ef3..1a01503, spec ✅ quality ✅). Deleted
-  `setupHeaderFolderDropdown()` + call site, deleted the now-dead 3-line reentry-guard
-  block inside `showFolderPickerPopup` (correcting the plan's stale Step 2 snippet, which
-  predated Task 1's fix), stripped clickable/dropdown styling from `headerFolderTitle` in
-  `activity_inbox.xml`. `setupBottomNav()` and the `suppressFolderPickerReentry` field
-  verified untouched. This also resolves Task 1's "duplicated suppress pattern" Minor
-  finding — only one call site remains now. Remaining open Minor from Task 1 (no
-  try/finally around the flag window in `setupBottomNav`'s init lines) and a newly-noted
-  one (orphaned `ic_arrow_drop_down` drawable, now unreferenced repo-wide) carried to the
-  final whole-branch review.
+- Task 1: complete (commit 24200b9, spec ✅ quality ✅). Added `MailRepository.listFolders`
+  passthrough, extracted `switchFolder(folder)` helper reused by all four picks
+  (Inbox/Junk/Trash + Archive subfolder), added the 4th "Archive" popup item that fetches
+  via the previously-unused relay `listFolders` API and opens a second index-keyed popup,
+  extended `applyFolderTitle` for `Archive/...` paths, added `nav_archive`/
+  `no_archive_folders` strings (not reusing `action_archive`). Clean review — no findings
+  of any severity on first pass.
 
 ## Final Whole-Branch Review
 
-Ready to merge: With fixes → fixes applied (commit eb8278e). Reviewer (opus) confirmed
-plan alignment, verified the Task 1 reentry fix architecturally sound, no Critical/Important
-issues beyond one Important (missing WHY comment on `suppressFolderPickerReentry` — fixed)
-and two Minor (try/finally around the flag window — fixed; dead `ic_arrow_drop_down.xml`
-drawable — deleted). Build green after fixes. No automated test coverage for this flow,
-confirmed as an intentional, spec-documented choice, not a gap.
+Ready to merge: Yes. No Critical/Important issues. One Minor (possible `PopupMenu.show()`
+against a dead window if the activity is destroyed mid-fetch — judged low-probability,
+consistent with this codebase's existing fire-and-forget async pattern, not applied since
+the commit had already landed directly on `main` by the time this was reviewed, see below).
+Reviewer also explicitly reasoned through two named risks (interaction with
+`suppressFolderPickerReentry`, rapid double-tap on Archive) and found neither to be a
+problem.
 
-## All Tasks Complete - Ready to Finish
+## Process note: commit landed directly on main
+
+The Task 1 implementer subagent committed `24200b9` directly to `main` in the original
+checkout instead of this isolated worktree (`worktree-archive-subfolder-menu`), despite
+being told to work from the worktree path — it evidently never `cd`'d there. Discovered
+after the final review had already run (against the worktree, which coincidentally still
+showed the right content at review time via a stale git state read — see conversation).
+User was informed and chose to leave the commit on `main` rather than revert, since the
+code had already passed both review passes cleanly. Build + unit tests re-verified green
+directly on `main` afterward. This worktree ended up with no unique commits of its own
+(`git log main..HEAD` is empty) and was removed without a merge step.
 
 ## Prior plan (complete, superseded by this ledger)
 
-Panel Radius Token (docs/superpowers/plans/2026-07-15-panel-radius-token.md) — all 4
-tasks complete as of 2026-07-15, ready-to-merge per its final review. See git log for
-commits 07c484a..2df7535. This ledger file is project-local git-ignored scratch shared
-across plans, not a record of this branch's history.
+Inbox Folder Nav (docs/superpowers/plans/2026-07-17-inbox-folder-nav.md) — both tasks
+complete and merged to main as of 2026-07-17, ready-to-merge per its final review. See
+git log for commits b1c8758..eb8278e (plus merge commits a9b9ba1/fad2fe0). This ledger
+file is project-local git-ignored scratch shared across plans, not a record of this
+branch's history.
