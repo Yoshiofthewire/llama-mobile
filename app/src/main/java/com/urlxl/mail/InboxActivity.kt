@@ -54,6 +54,14 @@ class InboxActivity : AppCompatActivity() {
     private var lastAppliedThemeName: String = ""
 
     private var selectedTab = KeywordTabs.ALL
+    // BottomNavigationView routes setSelectedItemId() through the RESELECTED listener (not the
+    // SELECTED listener) whenever the target item is already selected — and nav_inbox is always
+    // the selected item here, since nav_compose/nav_contacts return false to avoid stealing
+    // selection (see the comment on that below). So both listener branches below must check this
+    // flag, and it must be raised around every programmatic `bottomNav.selectedItemId = R.id.nav_inbox`
+    // assignment, or that assignment re-enters the reselected listener and reopens the popup
+    // (this broke cold launch and post-pick behavior before this flag was added).
+    private var suppressFolderPickerReentry = false
     private var allEmails: List<Email> = emptyList()
     private var pendingMessageId: String? = null
     private var pendingSender: String? = null
@@ -101,7 +109,6 @@ class InboxActivity : AppCompatActivity() {
         applyInboxThemeChrome()
         setupRecyclerView()
         setupTabs()
-        setupHeaderFolderDropdown()
         setupBottomNav()
         setupSwipeGestures()
 
@@ -469,40 +476,40 @@ class InboxActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupHeaderFolderDropdown() {
-        val headerTitle = findViewById<View>(R.id.headerFolderTitle)
-        headerTitle.setOnClickListener {
-            val popupMenu = PopupMenu(this, headerTitle)
-            popupMenu.menu.add(0, 0, 0, getString(R.string.nav_inbox))
-            popupMenu.menu.add(0, 1, 1, getString(R.string.nav_junk))
-            popupMenu.menu.add(0, 2, 2, getString(R.string.nav_trash))
+    private fun showFolderPickerPopup(anchor: View) {
+        val popupMenu = PopupMenu(this, anchor)
+        popupMenu.menu.add(0, 0, 0, getString(R.string.nav_inbox))
+        popupMenu.menu.add(0, 1, 1, getString(R.string.nav_junk))
+        popupMenu.menu.add(0, 2, 2, getString(R.string.nav_trash))
 
-            popupMenu.setOnMenuItemClickListener { menuItem ->
-                val folder = when (menuItem.itemId) {
-                    0 -> "INBOX"
-                    1 -> "Junk"
-                    2 -> "Trash"
-                    else -> return@setOnMenuItemClickListener false
-                }
-                currentFolder = folder
-                selectedTab = KeywordTabs.ALL
-                applyFolderTitle()
-                refreshInbox()
-                bottomNav.selectedItemId = R.id.nav_inbox
-                true
+        popupMenu.setOnMenuItemClickListener { menuItem ->
+            val folder = when (menuItem.itemId) {
+                0 -> "INBOX"
+                1 -> "Junk"
+                2 -> "Trash"
+                else -> return@setOnMenuItemClickListener false
             }
-            popupMenu.show()
+            currentFolder = folder
+            selectedTab = KeywordTabs.ALL
+            applyFolderTitle()
+            refreshInbox()
+            true
         }
+        popupMenu.show()
     }
 
     private fun setupBottomNav() {
+        fun openFolderPickerFromTab() {
+            val anchor = bottomNav.findViewById<View>(R.id.nav_inbox) ?: bottomNav
+            showFolderPickerPopup(anchor)
+        }
+
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_inbox -> {
-                    currentFolder = "INBOX"
-                    selectedTab = KeywordTabs.ALL
-                    applyFolderTitle()
-                    refreshInbox()
+                    if (!suppressFolderPickerReentry) {
+                        openFolderPickerFromTab()
+                    }
                     true
                 }
                 // Return false for items that launch a separate screen: the tap still fires the
@@ -521,14 +528,16 @@ class InboxActivity : AppCompatActivity() {
             }
         }
         bottomNav.setOnItemReselectedListener { item ->
-            if (item.itemId == R.id.nav_inbox) {
-                currentFolder = "INBOX"
-                selectedTab = KeywordTabs.ALL
-                applyFolderTitle()
-                refreshInbox()
+            if (item.itemId == R.id.nav_inbox && !suppressFolderPickerReentry) {
+                openFolderPickerFromTab()
             }
         }
-        bottomNav.selectedItemId = R.id.nav_inbox
+        suppressFolderPickerReentry = true
+        try {
+            bottomNav.selectedItemId = R.id.nav_inbox
+        } finally {
+            suppressFolderPickerReentry = false
+        }
     }
 
     private fun setupSwipeGestures() {
