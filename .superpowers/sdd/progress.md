@@ -11,7 +11,7 @@
 - [x] Task 2: Room migration 5→6 for the `isSelf` column
 - [x] Task 3: Sort the self-contact to the top of the contact list
 - [x] Task 4: Label the self-contact in the contact list UI
-- [ ] Task 5: Add `contactCard` to the PGP QR key response model
+- [x] Task 5: Add `contactCard` to the PGP QR key response model
 - [ ] Task 6: Map a scanned `contactCard` to a `ContactDto`
 - [ ] Task 7: Offer "Create New Contact" when a scan includes a contact card
 
@@ -40,6 +40,12 @@
   via " · ". No layout changes. No device for the brief's manual walkthrough — reviewer
   hand-traced all four join-logic cases (self/org combinations) against the diff instead;
   **do the actual in-app walkthrough once a device is reachable** (brief Step 3).
+
+- Task 5: complete (commit 0035e6a, spec ✅ quality ✅). Added `PgpQrContactCardDto` (23 fields,
+  reusing the existing `ContactFieldDto`-family types, no duplication) and `PgpQrKeyDto.contactCard`.
+  Plain-JVM test task, no device needed — both new `PgpQrClientTest` cases (present/absent) ran
+  for real and passed. Reviewer independently cross-checked all 23 field names against the live
+  kypost-server source.
 
 ## Final Whole-Branch Review
 
