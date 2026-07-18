@@ -193,6 +193,56 @@ class PgpQrClientTest {
     }
 
     @Test
+    fun fetchKey_200_withContactCard_decodesCardFields() = runBlocking {
+        val callFactory = FakeCallFactory { request ->
+            response(
+                request,
+                """
+                {
+                  "name": "Alice",
+                  "fingerprint": "A1B2C3D4E5F6",
+                  "publicKey": "-----BEGIN PGP PUBLIC KEY BLOCK-----...",
+                  "contactCard": {
+                    "fn": "Alice Example",
+                    "org": "Example Corp",
+                    "emails": [{"label": "work", "value": "alice@example.com"}],
+                    "phones": [{"value": "+1-555-0100"}]
+                  }
+                }
+                """.trimIndent(),
+                200,
+            )
+        }
+        val client = PgpQrClient(callFactory = callFactory)
+
+        val result = client.fetchKey("https://relay.example.com", "tok-1")
+
+        assertTrue(result is PgpQrKeyResult.Success)
+        val card = (result as PgpQrKeyResult.Success).key.contactCard
+        assertEquals("Alice Example", card?.fn)
+        assertEquals("Example Corp", card?.org)
+        assertEquals("alice@example.com", card?.emails?.single()?.value)
+        assertEquals("+1-555-0100", card?.phones?.single()?.value)
+    }
+
+    @Test
+    fun fetchKey_200_withoutContactCard_decodesNullCard() = runBlocking {
+        val callFactory = FakeCallFactory { request ->
+            response(
+                request,
+                """{"name": "Alice", "fingerprint": "A1B2C3D4E5F6", "publicKey": "-----BEGIN PGP PUBLIC KEY BLOCK-----..."}""",
+                200,
+            )
+        }
+        val client = PgpQrClient(callFactory = callFactory)
+
+        val result = client.fetchKey("https://relay.example.com", "tok-1")
+
+        assertTrue(result is PgpQrKeyResult.Success)
+        assertNull((result as PgpQrKeyResult.Success).key.contactCard)
+    }
+
+    @Test
     fun fetchKey_403_mapsToForbidden() = runBlocking {
         val callFactory = FakeCallFactory { request -> response(request, "", 403) }
         val client = PgpQrClient(callFactory = callFactory)
