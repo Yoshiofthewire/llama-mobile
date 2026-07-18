@@ -7,7 +7,7 @@
 
 ## Tasks
 
-- [ ] Task 1: Add `isSelf` to `ContactDto`/`ContactEntity`/`ContactMappers`
+- [x] Task 1: Add `isSelf` to `ContactDto`/`ContactEntity`/`ContactMappers`
 - [ ] Task 2: Room migration 5→6 for the `isSelf` column
 - [ ] Task 3: Sort the self-contact to the top of the contact list
 - [ ] Task 4: Label the self-contact in the contact list UI
@@ -17,7 +17,7 @@
 
 ## Completed
 
-(none yet)
+- Task 1: complete (commit f078a8a, spec ✅ quality ✅). Added `isSelf: Boolean = false` to `ContactDto`/`ContactEntity` (with `@ColumnInfo(defaultValue = "0")`), wired through `ContactMappers.kt`. Note: the implementer's subagent initially committed this to `main` in the original checkout instead of this worktree (same class of mistake as a prior plan) — recovered by cherry-picking the commit onto this branch and hard-resetting `main` back to `ef60e76`. Also discarded a stray `app/schemas/.../5.json` diff caused by KSP re-exporting the v5 schema mid-task (harmless — Task 2's version bump to 6 supersedes it).
 
 ## Final Whole-Branch Review
 
