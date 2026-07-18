@@ -91,6 +91,12 @@ owner to re-approve it). Four items compiled but were never executed on a real d
 All plain-JVM unit tests ran for real and are green (`./gradlew testDebugUnitTest`, 29/29 tasks
 successful as of commit 67b6adc).
 
+**Post-review polish (commit 6e3b5c3):** applied both optional Minor items at user's request —
+hardened `contactDtoFromCard`'s `fn` fallback to `"Unknown"` when both the card's `fn` and the
+scanned `fallbackName` are blank (was previously possible to emit `fn = ""`), added a covering
+test, and refreshed `PgpKeyActivity`'s class-level KDoc to mention the new create-new-contact
+path. Full unit suite re-run green after the change.
+
 ## Prior plans (complete, superseded by this ledger)
 
 ### Security Fixes (WebView + Pairing)
