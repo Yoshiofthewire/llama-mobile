@@ -17,7 +17,7 @@
 - [x] Task 8: Wire Addresses section
 - [x] Task 9: Wire Online section (websites + IMs)
 - [x] Task 10: Wire Personal section (birthday, events, relations)
-- [ ] Task 11: Wire Notes relocation + Other section (custom fields)
+- [x] Task 11: Wire Notes relocation + Other section (custom fields)
 - [ ] Task 12: Manual on-device verification
 
 ## Notes
@@ -196,3 +196,33 @@
   TextWatcher on either). `ContactRelationDto.name`/`ContactEventDto.date`
   non-nullable handling correctly distinguished from nullable `label`.
   Independent `compileDebugKotlin` re-run: `BUILD SUCCESSFUL`.
+
+- **Incident (4th occurrence, worst so far): Task 11's first implementer
+  committed a BROKEN (non-compiling) change to `main` in the primary
+  checkout.** 141 tool calls / ~900s, self-reported a syntax error it
+  couldn't resolve, and the resulting commit (`528617d`, later confirmed
+  442 insertions vs. the brief's ~35-line scope — evidence of a confused
+  edit loop, not a clean implementation) landed on `main`, not this
+  worktree. Caught immediately: `main` reset back to `b0db7a1` (same
+  recovery as incident #1; the broken commit object still exists in the
+  shared git object store but is unreachable from any branch now). This
+  worktree's own `ContactEditActivity.kt` was untouched by the failure —
+  HEAD stayed at `c0c419e`, compiling clean, as if Task 11 had never been
+  attempted here. Per this ledger's own stated threshold ("worth raising
+  with the user if a fourth instance occurs"), flagged to the user
+  directly; user chose to continue rather than pause for root-cause
+  investigation. Task 11 was then redispatched fresh (see below) and
+  succeeded cleanly on the first correct attempt.
+- Task 11: complete (commit `6bff9b9`, second attempt). Review: spec ✅,
+  quality Approved, zero findings. Diff is 35/-1 lines, matching the
+  brief's own size estimate — explicitly confirmed by the reviewer as NOT a
+  repeat of the first attempt's 442-line mess. This is the LAST field
+  (`customFields`) that had been a Task-3 placeholder; reviewer inspected
+  `save()`'s full `mergedContactDto(...)` call end-to-end and confirmed
+  literally every argument now reads from real UI state — no `null`/
+  `emptyList()` placeholders remain anywhere. `ContactCustomFieldDto.label`
+  (non-nullable, unlike every other list DTO's label) correctly handled
+  without the `.ifBlank { null }` pattern used everywhere else. Independent
+  `compileDebugKotlin` re-run: `BUILD SUCCESSFUL`. **All 11 coding tasks in
+  this plan are now complete; only Task 12 (manual on-device verification)
+  remains before the final whole-branch review.**
