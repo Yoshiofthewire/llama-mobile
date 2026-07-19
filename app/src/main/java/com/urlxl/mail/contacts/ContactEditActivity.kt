@@ -49,6 +49,7 @@ class ContactEditActivity : AppCompatActivity() {
     private lateinit var pgpBadge: Chip
     private lateinit var emailList: RepeatableFieldList<ContactFieldDto>
     private lateinit var phoneList: RepeatableFieldList<ContactFieldDto>
+    private lateinit var addressList: RepeatableFieldList<ContactAddressDto>
 
     private var existingUid: String = ""
     private var existingRev: Long = 0
@@ -151,6 +152,54 @@ class ContactEditActivity : AppCompatActivity() {
             default = { ContactFieldDto() },
             onChanged = { findViewById<ExpandableSectionView>(R.id.sectionContact).setItemCount(emailList.items().size + phoneList.items().size) },
         )
+        findViewById<ExpandableSectionView>(R.id.sectionAddresses).setTitle(getString(R.string.contacts_section_addresses))
+        addressList = RepeatableFieldList(
+            container = findViewById(R.id.addressRowsContainer),
+            addButton = findViewById(R.id.btnAddAddress),
+            rowLayoutRes = R.layout.row_contact_address,
+            removeButtonId = R.id.rowAddressRemove,
+            bind = { rowView, item, onItemChanged ->
+                val labelField = rowView.findViewById<EditText>(R.id.rowAddressLabel)
+                val streetField = rowView.findViewById<EditText>(R.id.rowAddressStreet)
+                val cityField = rowView.findViewById<EditText>(R.id.rowAddressCity)
+                val regionField = rowView.findViewById<EditText>(R.id.rowAddressRegion)
+                val postalField = rowView.findViewById<EditText>(R.id.rowAddressPostalCode)
+                val countryField = rowView.findViewById<EditText>(R.id.rowAddressCountry)
+                labelField.hint = getString(R.string.contacts_address_label_hint)
+                streetField.hint = getString(R.string.contacts_address_street_hint)
+                cityField.hint = getString(R.string.contacts_address_city_hint)
+                regionField.hint = getString(R.string.contacts_address_region_hint)
+                postalField.hint = getString(R.string.contacts_address_postal_code_hint)
+                countryField.hint = getString(R.string.contacts_address_country_hint)
+                labelField.setText(item.label.orEmpty())
+                streetField.setText(item.street.orEmpty())
+                cityField.setText(item.city.orEmpty())
+                regionField.setText(item.region.orEmpty())
+                postalField.setText(item.postalCode.orEmpty())
+                countryField.setText(item.country.orEmpty())
+                val emit: () -> Unit = {
+                    onItemChanged(
+                        item.copy(
+                            label = labelField.text.toString().trim().ifBlank { null },
+                            street = streetField.text.toString().trim().ifBlank { null },
+                            city = cityField.text.toString().trim().ifBlank { null },
+                            region = regionField.text.toString().trim().ifBlank { null },
+                            postalCode = postalField.text.toString().trim().ifBlank { null },
+                            country = countryField.text.toString().trim().ifBlank { null },
+                        ),
+                    )
+                }
+                labelField.addTextChangedListener(SimpleTextWatcher(emit))
+                streetField.addTextChangedListener(SimpleTextWatcher(emit))
+                cityField.addTextChangedListener(SimpleTextWatcher(emit))
+                regionField.addTextChangedListener(SimpleTextWatcher(emit))
+                postalField.addTextChangedListener(SimpleTextWatcher(emit))
+                countryField.addTextChangedListener(SimpleTextWatcher(emit))
+            },
+            isBlank = { it.label.isNullOrBlank() && it.street.isNullOrBlank() && it.city.isNullOrBlank() && it.region.isNullOrBlank() && it.postalCode.isNullOrBlank() && it.country.isNullOrBlank() },
+            default = { ContactAddressDto() },
+            onChanged = { findViewById<ExpandableSectionView>(R.id.sectionAddresses).setItemCount(addressList.items().size) },
+        )
         saveButton = findViewById(R.id.btnSaveContact)
         deleteButton = findViewById(R.id.btnDeleteContact)
 
@@ -222,6 +271,9 @@ class ContactEditActivity : AppCompatActivity() {
             phoneList.setItems(dto.phones)
             findViewById<ExpandableSectionView>(R.id.sectionContact).setExpanded(dto.emails.isNotEmpty() || dto.phones.isNotEmpty())
             findViewById<ExpandableSectionView>(R.id.sectionContact).setItemCount(dto.emails.size + dto.phones.size)
+            addressList.setItems(dto.addresses)
+            findViewById<ExpandableSectionView>(R.id.sectionAddresses).setExpanded(dto.addresses.isNotEmpty())
+            findViewById<ExpandableSectionView>(R.id.sectionAddresses).setItemCount(dto.addresses.size)
         }
     }
 
@@ -249,7 +301,7 @@ class ContactEditActivity : AppCompatActivity() {
             birthday = null,
             emails = emailList.items(),
             phones = phoneList.items(),
-            addresses = emptyList(),
+            addresses = addressList.items(),
             ims = emptyList(),
             websites = emptyList(),
             relations = emptyList(),
