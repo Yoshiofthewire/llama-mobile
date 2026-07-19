@@ -116,6 +116,9 @@
     <string name="contacts_edit_title">Contact</string>
     <string name="contacts_saved">Contact saved</string>
     <string name="contacts_name_required">Name is required</string>
+    <string name="contacts_delete_confirm_title">Delete contact?</string>
+    <string name="contacts_delete_confirm_message">This will permanently delete this contact from this device and the server. This can\'t be undone.</string>
+    <string name="contacts_delete_confirm_positive">Delete</string>
     <string name="contacts_name_label">Name</string>
     <string name="contacts_name_hint">Full name</string>
     <string name="contacts_org_label">Organization (optional)</string>
