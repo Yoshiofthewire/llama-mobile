@@ -323,7 +323,8 @@ git commit -m "feat(contacts): add generic RepeatableFieldList component"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="8dp"
-        android:textSize="12sp" />
+        android:textSize="12sp"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/sectionHeaderChevron"
