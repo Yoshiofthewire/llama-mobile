@@ -8,6 +8,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.chip.Chip
@@ -380,7 +381,7 @@ class ContactEditActivity : AppCompatActivity() {
         }
 
         saveButton.setOnClickListener { save() }
-        deleteButton.setOnClickListener { delete() }
+        deleteButton.setOnClickListener { confirmDelete() }
     }
 
     override fun onResume() {
@@ -498,6 +499,15 @@ class ContactEditActivity : AppCompatActivity() {
             Toast.makeText(this@ContactEditActivity, R.string.contacts_saved, Toast.LENGTH_SHORT).show()
             finish()
         }
+    }
+
+    private fun confirmDelete() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.contacts_delete_confirm_title)
+            .setMessage(R.string.contacts_delete_confirm_message)
+            .setPositiveButton(R.string.contacts_delete_confirm_positive) { _, _ -> delete() }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun delete() {
