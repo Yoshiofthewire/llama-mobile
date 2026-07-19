@@ -40,6 +40,16 @@ class ContactEditActivity : AppCompatActivity() {
     private var extraEmails: List<ContactFieldDto> = emptyList()
     private var extraPhones: List<ContactFieldDto> = emptyList()
 
+    /** The full contact as loaded from Room, including every field this single-screen editor has
+     *  no UI for (structured name parts, addresses, ims, websites, relations, events, phonetic
+     *  names, department, customFields, pronouns, photoRef, groupIDs, pgpKey, isSelf, ...). [save]
+     *  must `.copy()` off this rather than building a fresh [ContactDto], or every field not shown
+     *  here gets silently wiped — locally immediately, and on the server too, since both the local
+     *  upsert and the server's PUT/push handlers fully replace the stored contact rather than
+     *  merging. Stays at [ContactDto]'s all-default value for new (not-yet-existing) contacts,
+     *  which is correct: there's nothing prior to preserve. */
+    private var loadedDto: ContactDto = ContactDto()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_contact_edit)
@@ -90,6 +100,7 @@ class ContactEditActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val entity = DataRuntime.graph(this@ContactEditActivity).database.contactDao().getByUid(uid) ?: return@launch
             val dto = entity.toDto()
+            loadedDto = dto
             existingRev = dto.rev
             fnField.setText(dto.fn)
             orgField.setText(dto.org.orEmpty())
@@ -112,7 +123,8 @@ class ContactEditActivity : AppCompatActivity() {
         val emails = (if (email.isNotBlank()) listOf(ContactFieldDto(value = email)) else emptyList()) + extraEmails
         val phones = (if (phone.isNotBlank()) listOf(ContactFieldDto(value = phone)) else emptyList()) + extraPhones
 
-        val dto = ContactDto(
+        val dto = mergedContactDto(
+            loaded = loadedDto,
             uid = existingUid,
             rev = existingRev,
             fn = fn,
@@ -152,3 +164,26 @@ class ContactEditActivity : AppCompatActivity() {
         const val EXTRA_UID = "contact_uid"
     }
 }
+
+/** Pulled out of [ContactEditActivity.save] so the field-preservation behavior — every field this
+ *  single-screen editor has no UI for must survive a save, since [loaded]'s `.copy()` is the only
+ *  thing standing between an edit and a silent full-contact wipe (see [ContactEditActivity]'s
+ *  `loadedDto` KDoc) — is unit-testable without a Context-backed Room/Activity. */
+internal fun mergedContactDto(
+    loaded: ContactDto,
+    uid: String,
+    rev: Long,
+    fn: String,
+    org: String?,
+    notes: String?,
+    emails: List<ContactFieldDto>,
+    phones: List<ContactFieldDto>,
+): ContactDto = loaded.copy(
+    uid = uid,
+    rev = rev,
+    fn = fn,
+    org = org,
+    notes = notes,
+    emails = emails,
+    phones = phones,
+)
