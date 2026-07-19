@@ -14,7 +14,7 @@
 - [x] Task 5: Wire Name section + read-only `isSelf`/`pgpKey` badges
 - [x] Task 6: Wire Work section
 - [x] Task 7: Wire Contact section (full emails/phones lists)
-- [ ] Task 8: Wire Addresses section
+- [x] Task 8: Wire Addresses section
 - [ ] Task 9: Wire Online section (websites + IMs)
 - [ ] Task 10: Wire Personal section (birthday, events, relations)
 - [ ] Task 11: Wire Notes relocation + Other section (custom fields)
@@ -167,3 +167,11 @@
   fixed: class-level KDoc above `ContactEditActivity` is now stale (still
   describes the old single-value-with-overflow-preservation behavior this
   task replaced). Carry to final whole-branch review.
+
+- Task 8: complete (commit `be46077`). Review: spec ✅, quality Approved,
+  zero findings of any severity. No wrong-checkout incident. This row has
+  six fields (vs. two for emails/phones), so the reviewer specifically
+  checked the shared-`emit` closure spans all six, not just some —
+  confirmed correct, all six `TextWatcher`s reference the same closure
+  instance. `isBlank` correctly ANDs all six `isNullOrBlank()` checks.
+  Independent `compileDebugKotlin` re-run: `BUILD SUCCESSFUL`.
