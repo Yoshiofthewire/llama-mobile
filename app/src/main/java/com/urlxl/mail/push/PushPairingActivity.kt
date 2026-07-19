@@ -22,6 +22,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.chip.Chip
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.urlxl.mail.R
+import com.urlxl.mail.contacts.device.DeviceContactSyncEnabler
+import com.urlxl.mail.contacts.device.DeviceContactSyncSettings
+import com.urlxl.mail.contacts.device.DeviceContactsRuntime
 import com.urlxl.mail.applyEmptyStateBackground
 import com.urlxl.mail.applyPillChipTheme
 import com.urlxl.mail.applyPrimaryButtonTheme
@@ -66,6 +69,25 @@ class PushPairingActivity : AppCompatActivity() {
         }
     }
 
+    private val contactPermissionLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>> = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { permissions ->
+        val allGranted = permissions.all { it.value }
+        if (allGranted) {
+            syncEnabler.enableAfterPermissionGrant()
+        } else {
+            Toast.makeText(this, R.string.contacts_device_sync_permission_denied, Toast.LENGTH_SHORT).show()
+        }
+        // Whether or not sync got enabled, this is the resolution of the permission flow the
+        // intro popup kicked off — safe to continue to the scanner now that it's settled.
+        scanQr()
+    }
+
+    private val syncEnabler = DeviceContactSyncEnabler(
+        activity = this,
+        permissionLauncher = contactPermissionLauncher,
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_push_pairing)
@@ -83,7 +105,7 @@ class PushPairingActivity : AppCompatActivity() {
 
         btnResyncToken.setOnClickListener { viewModel.resyncToken() }
         btnClearPairing.setOnClickListener { viewModel.clearPairing() }
-        btnScanQr.setOnClickListener { scanQr() }
+        btnScanQr.setOnClickListener { onScanQrClicked() }
         chipUseUnifiedPush.setOnClickListener { viewModel.switchToUnifiedPush(this) }
         chipUseFirebase.setOnClickListener { viewModel.switchToFirebase() }
 
@@ -194,6 +216,32 @@ class PushPairingActivity : AppCompatActivity() {
     private fun consumeDeepLink(intent: android.content.Intent?) {
         val data = intent?.dataString ?: return
         handleParsedPairing(NativePairingDeepLinkParser.parse(data), alwaysConfirm = true)
+    }
+
+    private fun onScanQrClicked() {
+        val settings = DeviceContactsRuntime.graph(this).settings
+        if (settings.hasShownSyncIntro()) {
+            scanQr()
+        } else {
+            showSyncIntroDialog(settings)
+        }
+    }
+
+    private fun showSyncIntroDialog(settings: DeviceContactSyncSettings) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.contact_sync_intro_title)
+            .setMessage(R.string.contact_sync_intro_message)
+            .setPositiveButton(R.string.contact_sync_intro_positive) { _, _ ->
+                // If this needs to request permissions, contactPermissionLauncher's callback
+                // calls scanQr() once that resolves. Calling it here too would launch the QR
+                // scanner on top of the still-open system permission dialog.
+                val requestedPermission = syncEnabler.checkAndEnable()
+                if (!requestedPermission) scanQr()
+            }
+            .setNegativeButton(R.string.contact_sync_intro_negative) { _, _ -> scanQr() }
+            .setOnCancelListener { scanQr() }
+            .setOnDismissListener { settings.setHasShownSyncIntro(true) }
+            .show()
     }
 
     private fun scanQr() {
