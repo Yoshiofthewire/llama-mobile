@@ -1,5 +1,7 @@
 package com.urlxl.mail.mail
 
+import com.urlxl.mail.HEADER_SUBSCRIBER_HASH
+import com.urlxl.mail.HEADER_SUBSCRIBER_ID
 import com.urlxl.mail.push.PairingData
 import okhttp3.Call
 import okhttp3.Callback
@@ -213,5 +215,111 @@ class RelayMailSourceTest {
         assertTrue(!result.isDelta)
         assertEquals(1, result.messages.size)
         assertNull(cursorProvider.savedCursor)
+    }
+
+    @Test
+    fun fetchInbox_sendsPairingHeaders_notQueryParams() {
+        val cursorProvider = FakeMailCursorProvider(storedCursor = null)
+        val callFactory = FakeCallFactory { request ->
+            jsonResponse(request, """{"tabs": [], "byTab": {}, "cursor": "c1", "delta": true, "removed": []}""")
+        }
+        val source = RelayMailSource(
+            pairingProvider = { testPairing() },
+            cursorProvider = cursorProvider,
+            callFactory = callFactory,
+        )
+
+        source.fetchInbox("INBOX", 50)
+
+        val sentRequest = callFactory.requests.single()
+        assertEquals("sub-1", sentRequest.header(HEADER_SUBSCRIBER_ID))
+        assertEquals("hash-1", sentRequest.header(HEADER_SUBSCRIBER_HASH))
+        assertNull(sentRequest.url.queryParameter("sub"))
+        assertNull(sentRequest.url.queryParameter("hash"))
+    }
+
+    @Test
+    fun listFolders_sendsPairingHeaders_notQueryParams() {
+        val callFactory = FakeCallFactory { request ->
+            jsonResponse(request, """{"parent": null, "folders": []}""")
+        }
+        val source = RelayMailSource(
+            pairingProvider = { testPairing() },
+            cursorProvider = FakeMailCursorProvider(),
+            callFactory = callFactory,
+        )
+
+        source.listFolders(null)
+
+        val sentRequest = callFactory.requests.single()
+        assertEquals("sub-1", sentRequest.header(HEADER_SUBSCRIBER_ID))
+        assertEquals("hash-1", sentRequest.header(HEADER_SUBSCRIBER_HASH))
+        assertNull(sentRequest.url.queryParameter("sub"))
+        assertNull(sentRequest.url.queryParameter("hash"))
+    }
+
+    @Test
+    fun createFolder_sendsPairingHeaders_notQueryParams() {
+        val callFactory = FakeCallFactory { request -> jsonResponse(request, "", code = 200) }
+        val source = RelayMailSource(
+            pairingProvider = { testPairing() },
+            cursorProvider = FakeMailCursorProvider(),
+            callFactory = callFactory,
+        )
+
+        source.createFolder("INBOX", "New Folder")
+
+        val sentRequest = callFactory.requests.single()
+        assertEquals("sub-1", sentRequest.header(HEADER_SUBSCRIBER_ID))
+        assertEquals("hash-1", sentRequest.header(HEADER_SUBSCRIBER_HASH))
+        assertNull(sentRequest.url.queryParameter("sub"))
+        assertNull(sentRequest.url.queryParameter("hash"))
+    }
+
+    @Test
+    fun deleteFolder_sendsPairingHeaders_notQueryParams() {
+        val callFactory = FakeCallFactory { request -> jsonResponse(request, "", code = 200) }
+        val source = RelayMailSource(
+            pairingProvider = { testPairing() },
+            cursorProvider = FakeMailCursorProvider(),
+            callFactory = callFactory,
+        )
+
+        source.deleteFolder("INBOX/Old")
+
+        val sentRequest = callFactory.requests.single()
+        assertEquals("sub-1", sentRequest.header(HEADER_SUBSCRIBER_ID))
+        assertEquals("hash-1", sentRequest.header(HEADER_SUBSCRIBER_HASH))
+        assertNull(sentRequest.url.queryParameter("sub"))
+        assertNull(sentRequest.url.queryParameter("hash"))
+        assertEquals("INBOX/Old", sentRequest.url.queryParameter("folder"))
+    }
+
+    @Test
+    fun downloadAttachment_sendsPairingHeaders_notQueryParams() {
+        val callFactory = FakeCallFactory { request ->
+            Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .header("Content-Disposition", "attachment; filename=\"file.pdf\"")
+                .header("Content-Type", "application/pdf")
+                .body("bytes".toResponseBody("application/pdf".toMediaType()))
+                .build()
+        }
+        val source = RelayMailSource(
+            pairingProvider = { testPairing() },
+            cursorProvider = FakeMailCursorProvider(),
+            callFactory = callFactory,
+        )
+
+        source.downloadAttachment("m1", "INBOX", 0)
+
+        val sentRequest = callFactory.requests.single()
+        assertEquals("sub-1", sentRequest.header(HEADER_SUBSCRIBER_ID))
+        assertEquals("hash-1", sentRequest.header(HEADER_SUBSCRIBER_HASH))
+        assertNull(sentRequest.url.queryParameter("sub"))
+        assertNull(sentRequest.url.queryParameter("hash"))
     }
 }
