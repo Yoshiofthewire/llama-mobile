@@ -22,10 +22,10 @@ import com.urlxl.mail.contacts.device.DeviceContactsRuntime
 import com.urlxl.mail.data.DataRuntime
 import kotlinx.coroutines.launch
 
-/** Create/edit form. Only fn is required per Mobile_Contact_Sync.md's field table; everything
- *  else is optional. A contact may carry more than one email/phone (set elsewhere, e.g. the web
- *  UI or CardDAV) — this single-field editor preserves any entries beyond the first untouched
- *  rather than silently dropping them on save. */
+/** Create/edit form, organized into collapsible sections (Name, Work, Contact, Addresses, Online,
+ *  Personal, Notes, Other). Only fn is required per Mobile_Contact_Sync.md's field table; everything
+ *  else is optional. Covers every contact field except photoRef/groupIDs (no UI yet) and isSelf/
+ *  pgpKey (read-only badges — set only via the web app / PGP QR exchange respectively). */
 class ContactEditActivity : AppCompatActivity() {
 
     private lateinit var avatarView: TextView
@@ -553,10 +553,10 @@ class ContactEditActivity : AppCompatActivity() {
     }
 }
 
-/** Pulled out of [ContactEditActivity.save] so the field-preservation behavior — every field this
- *  single-screen editor has no UI for must survive a save, since [loaded]'s `.copy()` is the only
- *  thing standing between an edit and a silent full-contact wipe (see [ContactEditActivity]'s
- *  `loadedDto` KDoc) — is unit-testable without a Context-backed Room/Activity. */
+/** Pulled out of [ContactEditActivity.save] so it's unit-testable without a Context-backed Room/
+ *  Activity. Applies real edits for every field the editor exposes UI for, while `.copy()`-ing off
+ *  [loaded] so the handful of fields it doesn't (`photoRef`, `groupIDs`, `isSelf`, `pgpKey`) survive
+ *  untouched instead of silently wiping on save (see [ContactEditActivity]'s `loadedDto` KDoc). */
 internal fun mergedContactDto(
     loaded: ContactDto,
     uid: String,
