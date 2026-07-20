@@ -20,7 +20,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
-const val THEME_STORAGE_KEY = "llama-lab-theme"
+const val THEME_STORAGE_KEY = "kypost-theme"
 
 val THEME_OPTIONS = listOf(
     "Dark Matter",

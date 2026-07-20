@@ -6,7 +6,7 @@ import com.urlxl.mail.SingletonGraph
 
 class DataGraph(context: Context) {
     private val appContext = context.applicationContext
-    val database: AppDatabase = Room.databaseBuilder(appContext, AppDatabase::class.java, "llama_mail.db")
+    val database: AppDatabase = Room.databaseBuilder(appContext, AppDatabase::class.java, "kypost_mail.db")
         .addMigrations(
             AppDatabase.MIGRATION_1_2,
             AppDatabase.MIGRATION_2_3,

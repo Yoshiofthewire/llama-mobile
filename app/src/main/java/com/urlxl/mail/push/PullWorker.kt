@@ -39,7 +39,7 @@ class PullWorker(
 }
 
 object PullScheduler {
-    private const val PERIODIC_WORK_NAME = "llama_pull_periodic"
+    private const val PERIODIC_WORK_NAME = "kypost_pull_periodic"
 
     // WorkManager's hard floor for periodic work; documented as the baseline pull cadence.
     private const val PERIOD_MINUTES = 15L

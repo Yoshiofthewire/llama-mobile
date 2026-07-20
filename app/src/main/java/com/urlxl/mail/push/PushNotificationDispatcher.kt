@@ -14,8 +14,8 @@ import com.urlxl.mail.MainActivity
 import com.urlxl.mail.R
 
 object PushNotificationDispatcher {
-    private const val CHANNEL_ID = "llama_labels_push"
-    private const val MFA_CHANNEL_ID = "llama_labels_mfa"
+    private const val CHANNEL_ID = "kypost_push"
+    private const val MFA_CHANNEL_ID = "kypost_mfa"
 
     const val ACTION_MFA_APPROVE = "com.urlxl.mail.push.ACTION_MFA_APPROVE"
     const val ACTION_MFA_DENY = "com.urlxl.mail.push.ACTION_MFA_DENY"
@@ -32,7 +32,7 @@ object PushNotificationDispatcher {
 
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Llama Labels",
+            "KyPost",
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
             description = "Push notifications for labeled email events"

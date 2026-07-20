@@ -12,7 +12,7 @@ import android.provider.ContactsContract.CommonDataKinds.Relation
 object DeviceContactFieldCoding {
     /** `whatsapp|signal|telegram|instagram|x|linkedin|facebook|mastodon|matrix|""` (=other) -> a
      *  human-readable display string, mirroring the web frontend's `IM_SERVICES` catalog
-     *  (`llama-labels/frontend/src/api/contacts.ts`) so the two stay in sync. None of these map to
+     *  (`kypost-server/frontend/src/api/contacts.ts`) so the two stay in sync. None of these map to
      *  a built-in `Im.PROTOCOL_*` constant, so every `ims` row is written as `PROTOCOL_CUSTOM` with
      *  this resolved string as `CUSTOM_PROTOCOL`. */
     fun imCustomProtocolLabel(service: String?, label: String?): String = when (service) {

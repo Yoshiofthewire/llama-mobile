@@ -27,7 +27,7 @@ class DeviceContactSyncWorker(
 }
 
 object DeviceContactSyncScheduler {
-    private const val PERIODIC_WORK_NAME = "llama_device_contact_sync_periodic"
+    private const val PERIODIC_WORK_NAME = "kypost_device_contact_sync_periodic"
     private const val PERIOD_MINUTES = 15L
 
     fun ensurePeriodic(context: Context) {

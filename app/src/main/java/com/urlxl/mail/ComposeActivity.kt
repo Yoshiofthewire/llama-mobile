@@ -224,7 +224,7 @@ class ComposeActivity : AppCompatActivity() {
             }
             a { color: ${palette.accent}; }
         """.trimIndent()
-        bodyEditor.addCss(css, id = "llama-theme")
+        bodyEditor.addCss(css, id = "kypost-compose-theme")
     }
 
     private fun showCreateLinkDialog() {

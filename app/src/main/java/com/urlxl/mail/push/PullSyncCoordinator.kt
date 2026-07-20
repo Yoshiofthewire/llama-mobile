@@ -9,7 +9,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Drives the "App Pull" delivery mode: fetches queued notifications directly from the
- * Llama Labels server (bypassing FCM / the Cloudflare relay), renders them through the
+ * KyPost server (bypassing FCM / the Cloudflare relay), renders them through the
  * same [PushNotificationDispatcher] the FCM data-message path uses, and advances a
  * durable per-subscriber cursor so nothing is shown twice across polls or restarts.
  *
