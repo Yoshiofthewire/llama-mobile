@@ -31,7 +31,7 @@ object AppRestart {
             PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE,
         )
         val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        alarmManager.setExact(
+        alarmManager.set(
             AlarmManager.ELAPSED_REALTIME,
             SystemClock.elapsedRealtime() + RESTART_DELAY_MILLIS,
             pendingIntent,
