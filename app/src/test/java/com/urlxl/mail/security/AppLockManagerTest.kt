@@ -112,6 +112,19 @@ class AppLockManagerTest {
     }
 
     @Test
+    fun attemptPin_withCredentialGateEnabled_andNoExistingSalt_generatesAndPersistsSalt() {
+        val state = FakeAppLockState().apply { setCredentialPinGateEnabled(true) }
+        val manager = AppLockManager(state) {}
+
+        assertTrue(state.credentialSalt() == null)
+
+        manager.attemptPin("123456")
+
+        assertTrue(manager.cachedCredentialKey() != null)
+        assertTrue(state.credentialSalt() != null)
+    }
+
+    @Test
     fun attemptPin_withCredentialGateDisabled_neverCachesAKey() {
         val manager = AppLockManager(FakeAppLockState(), {})
         manager.attemptPin("123456")
