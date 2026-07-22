@@ -1389,7 +1389,7 @@ git commit -m "android: view attachments ephemerally under Hostile Location Prot
 
 **Interfaces:**
 - Consumes: `AppLockManager`, `AppLockStore` (Task 4, 6), `SecurityWipe` (Task 7).
-- Produces: `class SecurityGraph(context: Context) { val appLockManager: AppLockManager }` with `companion object { fun of(context: Context): SecurityGraph }` (mirrors `PushRuntime`/`DataRuntime`'s `SingletonGraph` pattern). Consumed by `KyPostApp` (Task 15), `SecuritySettingsActivity` (Task 16), and `PushRepository` (Task 21).
+- Produces: `class SecurityGraph(context: Context) { val appLockManager: AppLockManager }` plus a separate `object SecurityRuntime { fun graph(context: Context): SecurityGraph }` (mirrors `PushGraph`/`PushRuntime` and `DataGraph`/`DataRuntime`'s exact split — a plain graph class plus a standalone `SingletonGraph`-backed runtime object, not an embedded companion). Consumed by `KyPostApp` (Task 15), `SecuritySettingsActivity` (Task 16), and `PushRepository` (Task 21) as `SecurityRuntime.graph(context)`.
 
 No dedicated test — this is Activity UI plus a thin DI singleton; the logic it wires together (`AppLockManager.attemptPin`) already has its own unit tests from Task 6.
 
@@ -1407,12 +1407,14 @@ class SecurityGraph(context: Context) {
     val appLockManager: AppLockManager = AppLockManager(AppLockStore(appContext)) {
         runBlocking { SecurityWipe.wipeAndResetApp(appContext) }
     }
+}
 
-    companion object {
-        private val holder = SingletonGraph(::SecurityGraph)
+/** Standalone singleton, kept independent of other runtimes — mirrors how `PushRuntime`/
+ *  `DataRuntime` each stand alone rather than nesting inside their graph classes. */
+object SecurityRuntime {
+    private val holder = SingletonGraph(::SecurityGraph)
 
-        fun of(context: Context): SecurityGraph = holder.get(context)
-    }
+    fun graph(context: Context): SecurityGraph = holder.get(context)
 }
 ```
 
@@ -1509,7 +1511,7 @@ class UnlockActivity : AppCompatActivity() {
         applyThemeToActivity(this)
         window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
 
-        appLockManager = SecurityGraph.of(this).appLockManager
+        appLockManager = SecurityRuntime.graph(this).appLockManager
 
         pinField = findViewById(R.id.unlockPinField)
         errorText = findViewById(R.id.unlockErrorText)
@@ -1706,7 +1708,7 @@ import com.urlxl.mail.contacts.ContactsRuntime
 import com.urlxl.mail.contacts.device.DeviceContactsRuntime
 import com.urlxl.mail.push.PushNotificationDispatcher
 import com.urlxl.mail.push.PushRuntime
-import com.urlxl.mail.security.SecurityGraph
+import com.urlxl.mail.security.SecurityRuntime
 import com.urlxl.mail.security.UnlockActivity
 
 class KyPostApp : Application(), DefaultLifecycleObserver {
@@ -1723,7 +1725,7 @@ class KyPostApp : Application(), DefaultLifecycleObserver {
 
     override fun onStart(owner: LifecycleOwner) {
         // App moved to the foreground.
-        if (SecurityGraph.of(this).appLockManager.locked.value) {
+        if (SecurityRuntime.graph(this).appLockManager.locked.value) {
             startActivity(
                 Intent(this, UnlockActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
@@ -1746,7 +1748,7 @@ class KyPostApp : Application(), DefaultLifecycleObserver {
     }
 
     override fun onStop(owner: LifecycleOwner) {
-        SecurityGraph.of(this).appLockManager.lockNow()
+        SecurityRuntime.graph(this).appLockManager.lockNow()
     }
 }
 ```
@@ -2606,7 +2608,7 @@ Read `app/src/main/java/com/urlxl/mail/push/PushRepository.kt` in full to find e
 In `PushRepository.kt`, add:
 
 ```kotlin
-import com.urlxl.mail.security.SecurityGraph
+import com.urlxl.mail.security.SecurityRuntime
 
 /** Pairing data for making an authenticated relay call right now — `deviceSecret` comes back
  *  null if "require unlock to receive push/MFA" is on and the app isn't currently unlocked via
@@ -2614,7 +2616,7 @@ import com.urlxl.mail.security.SecurityGraph
  *  deviceSecret as an auth failure (see [com.urlxl.mail.pairingAuthHeaders]'s `.orEmpty()`
  *  usage), so this fails the same way a real 401 would — no new error path needed. */
 fun pairingForAuthenticatedCall(): PairingData? =
-    securePairingStore.pairingSnapshot(SecurityGraph.of(context).appLockManager.cachedCredentialKey())
+    securePairingStore.pairingSnapshot(SecurityRuntime.graph(context).appLockManager.cachedCredentialKey())
 ```
 
 - [ ] **Step 3: Redirect authenticated-call sites to the new snapshot method**
@@ -2632,7 +2634,7 @@ For each match that's used to build an authenticated request (not a plain "is pa
 Find where pairing is first saved after a successful registration (in `PushRepository` or wherever `savePairing` is currently called), and change it to:
 
 ```kotlin
-val appLockManager = SecurityGraph.of(context).appLockManager
+val appLockManager = SecurityRuntime.graph(context).appLockManager
 val credentialKey = appLockManager.cachedCredentialKey()
 if (credentialKey != null) {
     securePairingStore.savePairing(newPairing, credentialKey, securePairingStore... /* the salt AppLockManager just used/created */)
