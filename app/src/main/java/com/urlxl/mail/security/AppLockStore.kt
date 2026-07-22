@@ -15,6 +15,7 @@ private const val KEY_PIN_SALT = "pin_salt"
 private const val KEY_PIN_HASH = "pin_hash"
 private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
 private const val KEY_LOCKOUT_UNTIL = "lockout_until_epoch_ms"
+private const val KEY_CREDENTIAL_SALT = "credential_salt"
 
 /** Everything [AppLockManager] needs from persisted app-lock state, kept as an interface so
  *  [AppLockManager] can be unit-tested against a fake instead of a real Context/Keystore. */
@@ -32,6 +33,11 @@ interface AppLockState {
     fun resetFailedAttempts()
     fun lockoutUntilEpochMs(): Long
     fun setLockoutUntilEpochMs(epochMs: Long)
+    /** PBKDF2 salt for [CredentialCipher.deriveKey], generated once on first use and persisted —
+     *  regenerating it per-unlock would make any secret already wrapped under the old key
+     *  undecryptable. Null until [setCredentialSalt] has been called at least once. */
+    fun credentialSalt(): ByteArray?
+    fun setCredentialSalt(salt: ByteArray)
     /** Clears PIN, lock/biometric/credential-gate flags, and attempt counters — the app-lock
      *  half of [SecurityWipe]'s full wipe, also used by "turn off Require Unlock to Open". */
     fun reset()
@@ -89,6 +95,13 @@ class AppLockStore(context: Context) : AppLockState {
     override fun lockoutUntilEpochMs(): Long = prefs.getLong(KEY_LOCKOUT_UNTIL, 0L)
     override fun setLockoutUntilEpochMs(epochMs: Long) {
         prefs.edit().putLong(KEY_LOCKOUT_UNTIL, epochMs).commit()
+    }
+
+    override fun credentialSalt(): ByteArray? =
+        prefs.getString(KEY_CREDENTIAL_SALT, null)?.let { Base64.decode(it, Base64.NO_WRAP) }
+
+    override fun setCredentialSalt(salt: ByteArray) {
+        prefs.edit().putString(KEY_CREDENTIAL_SALT, Base64.encodeToString(salt, Base64.NO_WRAP)).commit()
     }
 
     override fun reset() {

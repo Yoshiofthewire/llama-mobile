@@ -11,6 +11,7 @@ import org.junit.Test
 private class FakeAppLockState(
     private var lockEnabled: Boolean = true,
     private var pin: String? = "123456",
+    private var credentialSalt: ByteArray? = null,
 ) : AppLockState {
     private var biometricEnabled = false
     private var credentialGateEnabled = false
@@ -30,6 +31,8 @@ private class FakeAppLockState(
     override fun resetFailedAttempts() { failedAttempts = 0; lockoutUntil = 0L }
     override fun lockoutUntilEpochMs() = lockoutUntil
     override fun setLockoutUntilEpochMs(epochMs: Long) { lockoutUntil = epochMs }
+    override fun credentialSalt() = credentialSalt
+    override fun setCredentialSalt(salt: ByteArray) { credentialSalt = salt }
     override fun reset() { lockEnabled = false; pin = null; biometricEnabled = false; credentialGateEnabled = false; failedAttempts = 0; lockoutUntil = 0L }
 }
 
@@ -93,5 +96,25 @@ class AppLockManagerTest {
         assertFalse(manager.locked.value)
         manager.lockNow()
         assertTrue(manager.locked.value)
+    }
+
+    @Test
+    fun attemptPin_withCredentialGateEnabled_cachesDerivedKey_untilLocked() {
+        val salt = CredentialCipher.randomSalt()
+        val state = FakeAppLockState(credentialSalt = salt).apply { setCredentialPinGateEnabled(true) }
+        val manager = AppLockManager(state) {}
+
+        manager.attemptPin("123456")
+        assertTrue(manager.cachedCredentialKey() != null)
+
+        manager.lockNow()
+        assertTrue(manager.cachedCredentialKey() == null)
+    }
+
+    @Test
+    fun attemptPin_withCredentialGateDisabled_neverCachesAKey() {
+        val manager = AppLockManager(FakeAppLockState(), {})
+        manager.attemptPin("123456")
+        assertTrue(manager.cachedCredentialKey() == null)
     }
 }
