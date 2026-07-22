@@ -139,6 +139,12 @@
             android:exported="false"
             android:grantUriPermissions="true" />
 
+        <activity
+            android:name=".security.UnlockActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true" />
+
     </application>
 
 </manifest>

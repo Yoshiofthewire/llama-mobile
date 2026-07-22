@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/unlockRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp">
+
+    <TextView
+        android:id="@+id/unlockTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/unlock_title"
+        android:textSize="20sp"
+        android:layout_marginBottom="24dp" />
+
+    <EditText
+        android:id="@+id/unlockPinField"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:inputType="numberPassword"
+        android:maxLength="6"
+        android:gravity="center"
+        android:textSize="28sp"
+        android:hint="@string/unlock_pin_hint" />
+
+    <TextView
+        android:id="@+id/unlockErrorText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:textColor="#CC3333"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/unlockSubmitButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/unlock_button" />
+
+</LinearLayout>

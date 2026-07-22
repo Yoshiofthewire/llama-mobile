@@ -249,4 +249,10 @@
     <string name="pgp_qr_scan_save_existing_button">Add to Existing Contact</string>
     <string name="pgp_qr_scan_saved_new">Contact created with PGP key</string>
     <string name="pgp_qr_scan_canceled">QR scan canceled or failed</string>
+
+    <string name="unlock_title">Enter your PIN to continue</string>
+    <string name="unlock_pin_hint">6-digit PIN</string>
+    <string name="unlock_button">Unlock</string>
+    <string name="unlock_wrong_pin">Wrong PIN</string>
+    <string name="unlock_locked_out">Too many attempts — try again in %1$s</string>
 </resources>
