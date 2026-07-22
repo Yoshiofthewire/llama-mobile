@@ -15,6 +15,10 @@ class PushSyncCoordinator(
         val result = registrationClient.register(pairing = pairing, token = token)
         if (result is NativeRegistrationResult.Success) {
             repository.savePairing(pairing.copy(deviceId = result.deviceId ?: pairing.deviceId, deviceSecret = result.deviceSecret))
+            // TOFU: capture the TLS pin only here, on the pairing call itself — never on the
+            // routine resyncs below (syncAndPersist), so a MITM that appears after pairing gets
+            // rejected rather than silently re-trusted on the next successful resync.
+            result.tlsPin?.let { repository.saveTlsPin(it) }
             persistDelivery(pairing, result)
             repository.updateTransport(result.transport)
             repository.updateSyncState(lastSyncAtEpochMs = result.syncedAtEpochMs, syncError = null)

@@ -6,7 +6,6 @@ import android.content.Intent
 import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -36,7 +35,7 @@ class MfaResponseReceiver : BroadcastReceiver() {
             PushNotificationDispatcher.cancelMfaChallenge(context, challengeId)
 
             val graph = PushRuntime.graph(context)
-            val pairing = graph.repository.state.first().pairing
+            val pairing = graph.repository.pairingForAuthenticatedCall()
             if (pairing == null) {
                 showResultToast(context, "Not paired with a server")
                 return

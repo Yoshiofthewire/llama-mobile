@@ -38,7 +38,7 @@ class PullSyncCoordinator(
      */
     suspend fun pullOnce(): PullOutcome {
         val state = repository.state.first()
-        val pairing = state.pairing ?: return PullOutcome.NotPaired
+        val pairing = repository.pairingForAuthenticatedCall() ?: return PullOutcome.NotPaired
         val deviceId = pairing.deviceId
         val deviceSecret = pairing.deviceSecret
         if (deviceId.isNullOrBlank() || deviceSecret.isNullOrBlank()) return PullOutcome.NotPaired

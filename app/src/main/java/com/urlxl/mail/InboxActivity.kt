@@ -95,6 +95,7 @@ class InboxActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
         setContentView(R.layout.activity_inbox)
         applyThemeToActivity(this)
         lastAppliedThemeName = getStoredThemeName(this)
@@ -448,7 +449,8 @@ class InboxActivity : AppCompatActivity() {
         menu?.add(0, MENU_KEYWORDS, 1, R.string.menu_keywords)
         menu?.add(0, MENU_THEMES, 2, R.string.menu_themes)
         menu?.add(0, MENU_PUSH_PAIRING, 3, R.string.menu_pairing)
-        menu?.add(0, MENU_ABOUT, 4, R.string.menu_about)
+        menu?.add(0, MENU_SECURITY, 4, R.string.menu_security)
+        menu?.add(0, MENU_ABOUT, 5, R.string.menu_about)
         return super.onCreateOptionsMenu(menu)
     }
 
@@ -468,6 +470,10 @@ class InboxActivity : AppCompatActivity() {
             }
             MENU_PUSH_PAIRING -> {
                 startActivity(Intent(this, com.urlxl.mail.push.PushPairingActivity::class.java))
+                true
+            }
+            MENU_SECURITY -> {
+                startActivity(Intent(this, com.urlxl.mail.security.SecuritySettingsActivity::class.java))
                 true
             }
             MENU_ABOUT -> {
@@ -694,7 +700,8 @@ class InboxActivity : AppCompatActivity() {
         private const val MENU_KEYWORDS = 1
         private const val MENU_THEMES = 2
         private const val MENU_PUSH_PAIRING = 3
-        private const val MENU_ABOUT = 4
+        private const val MENU_SECURITY = 4
+        private const val MENU_ABOUT = 5
         private val SWIPE_ARCHIVE_COLOR = Color.parseColor(COLOR_WARNING)
         private val SWIPE_DELETE_COLOR = Color.parseColor(COLOR_DANGER)
     }

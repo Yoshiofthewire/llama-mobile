@@ -58,6 +58,21 @@ private class FakeCallFactory(private val responder: (Request) -> Response) : Ca
     }
 }
 
+/** A [Call.Factory] whose call always fails with [exception] — used to verify RelayMailSource's
+ *  exception-to-[MailOutcome] mapping (e.g. a TLS pin mismatch) without a real network/TLS stack. */
+private class ThrowingCallFactory(private val exception: Throwable) : Call.Factory {
+    override fun newCall(request: Request): Call = object : Call {
+        override fun request(): Request = request
+        override fun execute(): Response = throw exception
+        override fun enqueue(responseCallback: Callback) = responseCallback.onFailure(this, java.io.IOException(exception))
+        override fun cancel() {}
+        override fun isExecuted(): Boolean = false
+        override fun isCanceled(): Boolean = false
+        override fun timeout(): Timeout = Timeout.NONE
+        override fun clone(): Call = this
+    }
+}
+
 private class FakeCall(private val req: Request, private val response: Response) : Call {
     private var executed = false
     private var canceled = false
@@ -321,5 +336,34 @@ class RelayMailSourceTest {
         assertEquals("secret-1", sentRequest.header(HEADER_DEVICE_SECRET))
         assertNull(sentRequest.url.queryParameter("sub"))
         assertNull(sentRequest.url.queryParameter("hash"))
+    }
+
+    @Test
+    fun tlsPinMismatch_mapsToCertificateMismatch_notGenericNetworkError() {
+        val callFactory = ThrowingCallFactory(javax.net.ssl.SSLPeerUnverifiedException("pin mismatch"))
+        val source = RelayMailSource(
+            pairingProvider = { testPairing() },
+            cursorProvider = FakeMailCursorProvider(),
+            callFactory = callFactory,
+        )
+
+        val outcome = source.fetchInbox("INBOX", 50)
+
+        assertTrue(outcome is MailOutcome.CertificateMismatch)
+        assertEquals("pin mismatch", (outcome as MailOutcome.CertificateMismatch).message)
+    }
+
+    @Test
+    fun tlsPinMismatch_onDownloadAttachment_alsoMapsToCertificateMismatch() {
+        val callFactory = ThrowingCallFactory(javax.net.ssl.SSLPeerUnverifiedException("pin mismatch"))
+        val source = RelayMailSource(
+            pairingProvider = { testPairing() },
+            cursorProvider = FakeMailCursorProvider(),
+            callFactory = callFactory,
+        )
+
+        val outcome = source.downloadAttachment("m1", "INBOX", 0)
+
+        assertTrue(outcome is MailOutcome.CertificateMismatch)
     }
 }

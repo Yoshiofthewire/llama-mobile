@@ -19,6 +19,11 @@ sealed class MailOutcome<out T> {
 
     /** Any other 400, or a local validation failure. */
     data class BadRequest(val message: String) : MailOutcome<Nothing>()
+
+    /** TLS certificate didn't match the pin captured at pairing time — could be a legitimate
+     *  cert rotation on the user's own server, or an active MITM; either way, do not silently
+     *  fall back to trusting it. */
+    data class CertificateMismatch(val message: String) : MailOutcome<Nothing>()
 }
 
 /** Wording tailored per failure kind, per Mobile_Mail_Relay.md's error table — never auto-clears
@@ -30,6 +35,7 @@ fun MailOutcome<*>.userFacingMessage(): String? = when (this) {
     is MailOutcome.ServiceUnavailable -> "Mail relay is unavailable: $message"
     is MailOutcome.UpstreamFailure -> "Couldn't reach the mail server: $message"
     is MailOutcome.BadRequest -> message
+    is MailOutcome.CertificateMismatch -> "This server's certificate has changed since pairing — clear pairing and re-pair in Settings if you expect this (e.g. you rotated your server's certificate)"
 }
 
 data class MailFetchResult(

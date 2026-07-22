@@ -41,6 +41,7 @@ class EmailDetailActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
         setContentView(R.layout.activity_email_detail)
         applyThemeToActivity(this)
         lastAppliedThemeName = getStoredThemeName(this)
@@ -193,7 +194,8 @@ class EmailDetailActivity : AppCompatActivity() {
         chips.visibility = View.VISIBLE
         infos.forEach { info ->
             val chip = Chip(this).apply {
-                text = "📎 ${info.name}"
+                val protectionEnabled = com.urlxl.mail.security.HostileLocationSettings(this@EmailDetailActivity).isEnabled()
+                text = if (protectionEnabled) "👁 ${info.name}" else "📎 ${info.name}"
                 setOnClickListener { downloadAttachment(emailId, emailFolder, info) }
             }
             applyPillChipTheme(this, chip)
@@ -202,19 +204,46 @@ class EmailDetailActivity : AppCompatActivity() {
     }
 
     private fun downloadAttachment(emailId: String, emailFolder: String, info: AttachmentInfo) {
-        Toast.makeText(this, getString(R.string.attachment_downloading, info.name), Toast.LENGTH_SHORT).show()
+        val hostileLocationProtectionEnabled = com.urlxl.mail.security.HostileLocationSettings(this).isEnabled()
+        val action = com.urlxl.mail.security.attachmentActionFor(hostileLocationProtectionEnabled)
+        val loadingMessage = if (action == com.urlxl.mail.security.AttachmentAction.VIEW_EPHEMERAL) {
+            getString(R.string.attachment_opening, info.name)
+        } else {
+            getString(R.string.attachment_downloading, info.name)
+        }
+        Toast.makeText(this, loadingMessage, Toast.LENGTH_SHORT).show()
         ioExecutor.execute {
             val outcome = mailRepository.downloadAttachment(emailId, emailFolder, info.index)
-            val saved = (outcome as? MailOutcome.Success)?.value?.let { saveToDownloads(it.name, it.mimeType, it.bytes) } ?: false
+            val downloaded = (outcome as? MailOutcome.Success)?.value
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                val message = when {
-                    saved -> getString(R.string.attachment_saved, info.name)
-                    outcome is MailOutcome.Success -> getString(R.string.attachment_save_failed, info.name)
-                    else -> outcome.userFacingMessage() ?: getString(R.string.attachment_save_failed, info.name)
+                if (downloaded == null) {
+                    val message = outcome.userFacingMessage() ?: getString(R.string.attachment_save_failed, info.name)
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
                 }
-                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                when (action) {
+                    com.urlxl.mail.security.AttachmentAction.VIEW_EPHEMERAL -> viewAttachmentEphemerally(downloaded)
+                    com.urlxl.mail.security.AttachmentAction.SAVE_TO_DOWNLOADS -> {
+                        val saved = saveToDownloads(downloaded.name, downloaded.mimeType, downloaded.bytes)
+                        val message = if (saved) getString(R.string.attachment_saved, info.name) else getString(R.string.attachment_save_failed, info.name)
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                    }
+                }
             }
+        }
+    }
+
+    /** Hostile Location Protection path: hands the bytes to [com.urlxl.mail.security.EphemeralAttachmentBytes]
+     *  (never written to disk) and launches a viewer via ACTION_VIEW — nothing is saved anywhere. */
+    private fun viewAttachmentEphemerally(downloaded: com.urlxl.mail.mail.DownloadedAttachment) {
+        val uri = com.urlxl.mail.security.EphemeralAttachmentBytes.register(downloaded.bytes, downloaded.mimeType)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, downloaded.mimeType)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching { startActivity(intent) }.onFailure {
+            Toast.makeText(this, getString(R.string.attachment_save_failed, downloaded.name), Toast.LENGTH_LONG).show()
         }
     }
 

@@ -32,7 +32,15 @@ class RelayMailSource(
     // Call.Factory (not the concrete OkHttpClient) so tests can inject a fake without a real
     // network call or a MockWebServer dependency; OkHttpClient itself satisfies this interface.
     private val callFactory: Call.Factory = pairingHttpClient(),
+    // Re-read on every call (mirrors pairingProvider above, not a one-time snapshot) so a TLS
+    // pin captured by pairing after this object was constructed — or replaced by a fresh
+    // re-pair — takes effect immediately. Returns null (meaning: fall back to [callFactory]
+    // unpinned) until a pin actually exists, which is exactly [callFactory]'s own default
+    // behavior, so every existing test/call site that doesn't pass this is unaffected.
+    private val pinnedCallFactory: () -> Call.Factory? = { null },
 ) : MailSource {
+
+    private fun effectiveCallFactory(): Call.Factory = pinnedCallFactory() ?: callFactory
 
     /** Attaches this device's own pairing credentials. A missing deviceId/deviceSecret (not yet
      *  registered) sends blank headers, which the server rejects with 401 — surfaced through the
@@ -225,11 +233,15 @@ class RelayMailSource(
             .build()
         // Binary response: read bytes and metadata headers inside the use block, not execute()'s
         // string() path.
-        val result = callFactory.executeSync(request) { response ->
+        val result = effectiveCallFactory().executeSync(request) { response ->
             Triple(response.code, response.body?.bytes() ?: ByteArray(0), filenameFromDisposition(response.header("Content-Disposition")) to (response.header("Content-Type") ?: "application/octet-stream"))
         }
+        val downloadException = result.exceptionOrNull()
+        if (downloadException is javax.net.ssl.SSLPeerUnverifiedException) {
+            return MailOutcome.CertificateMismatch(downloadException.message ?: "Certificate pin mismatch")
+        }
         val (code, bytes, meta) = result.getOrNull()
-            ?: return MailOutcome.UpstreamFailure(result.exceptionOrNull()?.message ?: "Network error")
+            ?: return MailOutcome.UpstreamFailure(downloadException?.message ?: "Network error")
         if (code != 200) return mapErrorCode(code, bytes.toString(Charsets.UTF_8))
         val (name, contentType) = meta
         return MailOutcome.Success(DownloadedAttachment(name = name.ifBlank { "attachment" }, mimeType = contentType.substringBefore(';').trim(), bytes = bytes))
@@ -251,9 +263,13 @@ class RelayMailSource(
     }
 
     private fun <T> execute(request: Request, onResponse: (code: Int, body: String) -> MailOutcome<T>): MailOutcome<T> {
-        val result = callFactory.executeSync(request) { response -> response.code to response.body?.string().orEmpty() }
+        val result = effectiveCallFactory().executeSync(request) { response -> response.code to response.body?.string().orEmpty() }
+        val exception = result.exceptionOrNull()
+        if (exception is javax.net.ssl.SSLPeerUnverifiedException) {
+            return MailOutcome.CertificateMismatch(exception.message ?: "Certificate pin mismatch")
+        }
         val (code, body) = result.getOrNull()
-            ?: return MailOutcome.UpstreamFailure(result.exceptionOrNull()?.message ?: "Network error")
+            ?: return MailOutcome.UpstreamFailure(exception?.message ?: "Network error")
         return onResponse(code, body)
     }
 

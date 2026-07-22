@@ -3,16 +3,20 @@ package com.urlxl.mail.mail
 import android.content.Context
 import com.urlxl.mail.SingletonGraph
 import com.urlxl.mail.data.DataRuntime
+import com.urlxl.mail.push.PinnedCallFactoryProvider
 import com.urlxl.mail.push.PushRuntime
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 
 class MailGraph(context: Context) {
     private val appContext = context.applicationContext
     private val mailCursorStore = MailCursorStore(appContext)
+    private val pairingProvider = { PushRuntime.graph(appContext).repository.pairingForAuthenticatedCall() }
     private val relaySource: MailSource = RelayMailSource(
-        pairingProvider = { runBlocking { PushRuntime.graph(appContext).repository.state.first().pairing } },
+        pairingProvider = pairingProvider,
         cursorProvider = mailCursorStore,
+        pinnedCallFactory = PinnedCallFactoryProvider(
+            tlsPinProvider = { PushRuntime.graph(appContext).repository.currentTlsPin() },
+            pairingProvider = pairingProvider,
+        ),
     )
 
     val repository = MailRepository(

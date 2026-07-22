@@ -1,5 +1,6 @@
 package com.urlxl.mail
 
+import okhttp3.CertificatePinner
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -23,7 +24,17 @@ fun Request.Builder.pairingAuthHeaders(deviceId: String, deviceSecret: String): 
  * otherwise 3xx-redirect a request to an arbitrary host and receive the device's bearer
  * credential.
  */
-fun pairingHttpClient(): OkHttpClient = OkHttpClient.Builder()
-    .followRedirects(false)
-    .followSslRedirects(false)
-    .build()
+/** [pinnedSpkiSha256] + [host] both null (the default) matches every existing call site
+ *  unchanged — no pin enforced, exactly today's behavior. Both non-null enables TOFU pinning
+ *  for that host; see [com.urlxl.mail.security.SpkiPinner]. */
+fun pairingHttpClient(pinnedSpkiSha256: String? = null, host: String? = null): OkHttpClient {
+    val builder = OkHttpClient.Builder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+    if (pinnedSpkiSha256 != null && host != null) {
+        builder.certificatePinner(
+            CertificatePinner.Builder().add(host, pinnedSpkiSha256).build(),
+        )
+    }
+    return builder.build()
+}

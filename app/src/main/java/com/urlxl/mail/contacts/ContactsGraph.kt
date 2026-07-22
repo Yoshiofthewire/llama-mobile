@@ -4,21 +4,27 @@ import android.content.Context
 import com.urlxl.mail.SingletonGraph
 import com.urlxl.mail.data.DataRuntime
 import com.urlxl.mail.push.PushRuntime
-import kotlinx.coroutines.flow.first
+import com.urlxl.mail.push.pinnedPairingCallFactory
 
 class ContactsGraph(context: Context) {
     private val appContext = context.applicationContext
+
+    // Shared with both clients below — see finding C2 of the 2026-07-22 security-hardening
+    // spec's final-review fix round: contact/group sync used to default to the plain unpinned
+    // pairingHttpClient() even though it sends the same deviceSecret bearer credential as mail.
+    private val pinnedCallFactory = pinnedPairingCallFactory(appContext)
+
     val repository = ContactSyncRepository(
         db = DataRuntime.graph(appContext).database,
-        client = ContactSyncClient(),
+        client = ContactSyncClient(callFactory = pinnedCallFactory),
         cursorStore = ContactCursorStore(appContext),
-        pairingProvider = { PushRuntime.graph(appContext).repository.state.first().pairing },
+        pairingProvider = { PushRuntime.graph(appContext).repository.pairingForAuthenticatedCall() },
     )
     val coordinator = ContactSyncCoordinator(repository)
     val groupSyncRepository = GroupSyncRepository(
         db = DataRuntime.graph(appContext).database,
-        client = GroupsSyncClient(),
-        pairingProvider = { PushRuntime.graph(appContext).repository.state.first().pairing },
+        client = GroupsSyncClient(callFactory = pinnedCallFactory),
+        pairingProvider = { PushRuntime.graph(appContext).repository.pairingForAuthenticatedCall() },
     )
 }
 

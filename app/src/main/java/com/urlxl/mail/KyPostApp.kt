@@ -1,6 +1,7 @@
 package com.urlxl.mail
 
 import android.app.Application
+import android.content.Intent
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -8,6 +9,8 @@ import com.urlxl.mail.contacts.ContactsRuntime
 import com.urlxl.mail.contacts.device.DeviceContactsRuntime
 import com.urlxl.mail.push.PushNotificationDispatcher
 import com.urlxl.mail.push.PushRuntime
+import com.urlxl.mail.security.SecurityRuntime
+import com.urlxl.mail.security.UnlockActivity
 
 /**
  * Process-level wiring for push/pull delivery. Observes the process lifecycle so that every
@@ -29,6 +32,11 @@ class KyPostApp : Application(), DefaultLifecycleObserver {
 
     override fun onStart(owner: LifecycleOwner) {
         // App moved to the foreground.
+        if (SecurityRuntime.graph(this).appLockManager.locked.value) {
+            startActivity(
+                Intent(this, UnlockActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
         try {
             PushRuntime.graph(this).pullCoordinator.pullNowAsync()
         } catch (e: Exception) {
@@ -44,5 +52,9 @@ class KyPostApp : Application(), DefaultLifecycleObserver {
         } catch (e: Exception) {
             android.util.Log.e("KyPostApp", "Failed to sync contacts (device)", e)
         }
+    }
+
+    override fun onStop(owner: LifecycleOwner) {
+        SecurityRuntime.graph(this).appLockManager.lockNow()
     }
 }

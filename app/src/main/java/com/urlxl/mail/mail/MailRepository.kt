@@ -104,4 +104,5 @@ private fun <T> MailOutcome<T>.toUnitOutcome(): MailOutcome<Unit> = when (this) 
     is MailOutcome.ServiceUnavailable -> this
     is MailOutcome.UpstreamFailure -> this
     is MailOutcome.BadRequest -> this
+    is MailOutcome.CertificateMismatch -> this
 }

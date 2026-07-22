@@ -8,10 +8,11 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.urlxl.mail.ScopedValue
+import com.urlxl.mail.security.AppLockStore
+import com.urlxl.mail.security.SecurityRuntime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.IOException
@@ -48,8 +49,37 @@ class PushRepository(private val context: Context) {
         securePairingStore.pairing,
     ) { prefs, pairing -> toState(prefs, pairing) }
 
+    /** Pairing data for making an authenticated relay call right now — `deviceSecret` comes back
+     *  null if "require unlock to receive push/MFA" is on and the app isn't currently unlocked via
+     *  PIN, per the 2026-07-22 security-hardening spec; callers already treat a blank/missing
+     *  deviceSecret as an auth failure (see [com.urlxl.mail.pairingAuthHeaders]'s `.orEmpty()`
+     *  usage), so this fails the same way a real 401 would — no new error path needed. */
+    fun pairingForAuthenticatedCall(): PairingData? =
+        securePairingStore.pairingSnapshot(SecurityRuntime.graph(context).appLockManager.cachedCredentialKey())
+
+    /** The TOFU TLS pin captured right after the first successful pairing, or null if none has
+     *  been captured yet (never paired, or paired before this feature existed). Read fresh on
+     *  every call — never cached by the caller — since it can change on re-pairing. */
+    fun currentTlsPin(): String? = securePairingStore.currentTlsPin()
+
+    /** Persist the TLS pin captured on a just-succeeded pairing/registration call. See
+     *  [SecurePairingStore.saveTlsPin]; only [com.urlxl.mail.push.PushSyncCoordinator]
+     *  .attemptPairing calls this, not every routine registration resync. */
+    suspend fun saveTlsPin(pin: String) = securePairingStore.saveTlsPin(pin)
+
+    /** Saves pairing data, wrapping `deviceSecret` behind the currently-cached credential key if
+     *  "require unlock to receive push/MFA" is on and a PIN-derived key is available this session
+     *  (see [com.urlxl.mail.security.AppLockManager.cachedCredentialKey]) — otherwise stores it
+     *  unwrapped, exactly as before this gate existed. */
     suspend fun savePairing(pairing: PairingData) {
-        securePairingStore.savePairing(pairing)
+        val appLockManager = SecurityRuntime.graph(context).appLockManager
+        val credentialKey = appLockManager.cachedCredentialKey()
+        val credentialSalt = if (credentialKey != null) AppLockStore(context).credentialSalt() else null
+        if (credentialKey != null && credentialSalt != null) {
+            securePairingStore.savePairing(pairing, credentialKey, credentialSalt)
+        } else {
+            securePairingStore.savePairing(pairing)
+        }
         context.pushDataStore.edit { prefs ->
             prefs.remove(KEY_SYNC_ERROR)
         }
@@ -78,7 +108,7 @@ class PushRepository(private val context: Context) {
      * Also cancels the periodic pull worker, which [clearPairing] alone does not do.
      */
     suspend fun unpairDevice(deregisterClient: DeregisterClient): DeregisterResult {
-        val pairing = state.first().pairing
+        val pairing = pairingForAuthenticatedCall()
         val networkResult = if (pairing != null) {
             deregisterClient.deregister(pairing)
         } else {

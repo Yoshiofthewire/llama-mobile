@@ -92,6 +92,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)
     implementation("com.squareup.okhttp3:okhttp:5.2.1")

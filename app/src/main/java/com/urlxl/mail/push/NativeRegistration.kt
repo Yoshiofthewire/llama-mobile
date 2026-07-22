@@ -4,15 +4,16 @@ import android.os.Build
 import com.urlxl.mail.APP_VERSION
 import com.urlxl.mail.executeSync
 import com.urlxl.mail.pairingHttpClient
+import com.urlxl.mail.security.SpkiPinner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.Call
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
@@ -104,13 +105,22 @@ sealed class NativeRegistrationResult {
         val deliveryMode: DeliveryMode = DeliveryMode.PUSH,
         val pullEndpoint: String? = null,
         val transport: String? = null,
+        // TOFU (trust-on-first-use) SPKI pin of the leaf certificate seen on this successful
+        // registration call's TLS handshake, or null if the connection wasn't TLS (e.g. a plain
+        // http:// dev server) or the handshake info wasn't available. The caller decides whether
+        // to persist it (see PushSyncCoordinator.attemptPairing) — this class only carries it.
+        val tlsPin: String? = null,
     ) : NativeRegistrationResult()
     data class Error(val message: String, val expiredPairingToken: Boolean = false) : NativeRegistrationResult()
 }
 
 class NativeRegistrationClient(
     private val json: Json = Json { ignoreUnknownKeys = true },
-    private val okHttpClient: OkHttpClient = pairingHttpClient(),
+    // Call.Factory (not the concrete OkHttpClient) so a pinned-or-fallback factory (see
+    // PushGraph, finding C2 of the 2026-07-22 security-hardening spec's final-review fix round)
+    // can be injected here the same way every other pairing client accepts one; OkHttpClient
+    // itself still satisfies this interface, so the default below is unchanged behavior.
+    private val callFactory: Call.Factory = pairingHttpClient(),
 ) {
     suspend fun register(
         pairing: PairingData,
@@ -135,9 +145,13 @@ class NativeRegistrationClient(
             .build()
 
         val result = withContext(Dispatchers.IO) {
-            okHttpClient.executeSync(httpRequest) { response -> response.code to response.body?.string().orEmpty() }
+            // Captures the handshake alongside code/body (not just the mapped DTO) so a
+            // successful call can seed the TOFU TLS pin — see the `tlsPin` computation below.
+            callFactory.executeSync(httpRequest) { response ->
+                Triple(response.code, response.body?.string().orEmpty(), response.handshake)
+            }
         }
-        val (code, rawBody) = result.getOrNull()
+        val (code, rawBody, handshake) = result.getOrNull()
             ?: return NativeRegistrationResult.Error(result.exceptionOrNull()?.message ?: "Failed to register device")
 
         return when (code) {
@@ -151,6 +165,7 @@ class NativeRegistrationClient(
                         deliveryMode = DeliveryMode.fromWire(body.deliveryMode),
                         pullEndpoint = body.pullEndpoint,
                         transport = body.transport,
+                        tlsPin = handshake?.peerCertificates?.firstOrNull()?.let { SpkiPinner.pinFor(it) },
                     )
                 } else {
                     NativeRegistrationResult.Error("Registration did not confirm sync")

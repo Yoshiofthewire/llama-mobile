@@ -26,7 +26,7 @@ import com.urlxl.mail.contacts.ContactsRuntime
 import com.urlxl.mail.contacts.toDto
 import com.urlxl.mail.data.DataRuntime
 import com.urlxl.mail.push.PushRuntime
-import kotlinx.coroutines.flow.first
+import com.urlxl.mail.push.pinnedPairingCallFactory
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import okhttp3.HttpUrl
@@ -58,7 +58,11 @@ class PgpKeyActivity : AppCompatActivity() {
     private lateinit var confirmButton: Button
     private lateinit var scanButton: Button
 
-    private val client = PgpQrClient()
+    // lazy: pinnedPairingCallFactory(this) needs a valid Context, which isn't available yet at
+    // property-initializer time (before attachBaseContext) — deferring to first use (both call
+    // sites are well after onCreate) avoids a NullPointerException here. See finding C2 of the
+    // 2026-07-22 security-hardening spec's final-review fix round.
+    private val client by lazy { PgpQrClient(callFactory = pinnedPairingCallFactory(this)) }
     private var pendingKey: PgpQrKeyDto? = null
 
     private val pickContactLauncher = registerForActivityResult(
@@ -76,6 +80,7 @@ class PgpKeyActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
         setContentView(R.layout.activity_pgp_key)
         setTitle(R.string.pgp_key_signing_title)
         applyThemeToActivity(this)
@@ -108,7 +113,7 @@ class PgpKeyActivity : AppCompatActivity() {
         qrStatusText.text = getString(R.string.pgp_qr_my_code_loading)
 
         lifecycleScope.launch {
-            val pairing = PushRuntime.graph(this@PgpKeyActivity).repository.state.first().pairing
+            val pairing = PushRuntime.graph(this@PgpKeyActivity).repository.pairingForAuthenticatedCall()
             val deviceId = pairing?.deviceId
             val deviceSecret = pairing?.deviceSecret
             if (pairing == null || deviceId.isNullOrBlank() || deviceSecret.isNullOrBlank()) {

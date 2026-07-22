@@ -35,7 +35,7 @@
 In `gradle/libs.versions.toml`, add to `[versions]` (near `securityCrypto`):
 
 ```toml
-biometric = "1.4.0"
+biometric = "1.1.0"
 ```
 
 Add to `[libraries]` (near `androidx-security-crypto`):
@@ -913,7 +913,10 @@ object AppRestart {
             PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE,
         )
         val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        alarmManager.setExact(
+        // Non-exact set() deliberately, not setExact(): API 33+ requires SCHEDULE_EXACT_ALARM/
+        // USE_EXACT_ALARM for the exact variants (undeclared here, and unnecessary — this only
+        // needs "a few hundred ms" tolerance, not millisecond precision).
+        alarmManager.set(
             AlarmManager.ELAPSED_REALTIME,
             SystemClock.elapsedRealtime() + RESTART_DELAY_MILLIS,
             pendingIntent,
@@ -1185,7 +1188,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 private const val AUTHORITY_SUFFIX = ".ephemeralattachments"
 
-private data class PendingAttachment(val bytes: ByteArray, val mimeType: String)
+internal data class PendingAttachment(val bytes: ByteArray, val mimeType: String)
 
 /**
  * In-memory holder for attachment bytes awaiting a single ephemeral read, keyed by a one-time
@@ -1386,7 +1389,7 @@ git commit -m "android: view attachments ephemerally under Hostile Location Prot
 
 **Interfaces:**
 - Consumes: `AppLockManager`, `AppLockStore` (Task 4, 6), `SecurityWipe` (Task 7).
-- Produces: `class SecurityGraph(context: Context) { val appLockManager: AppLockManager }` with `companion object { fun of(context: Context): SecurityGraph }` (mirrors `PushRuntime`/`DataRuntime`'s `SingletonGraph` pattern). Consumed by `KyPostApp` (Task 15), `SecuritySettingsActivity` (Task 16), and `PushRepository` (Task 21).
+- Produces: `class SecurityGraph(context: Context) { val appLockManager: AppLockManager }` plus a separate `object SecurityRuntime { fun graph(context: Context): SecurityGraph }` (mirrors `PushGraph`/`PushRuntime` and `DataGraph`/`DataRuntime`'s exact split — a plain graph class plus a standalone `SingletonGraph`-backed runtime object, not an embedded companion). Consumed by `KyPostApp` (Task 15), `SecuritySettingsActivity` (Task 16), and `PushRepository` (Task 21) as `SecurityRuntime.graph(context)`.
 
 No dedicated test — this is Activity UI plus a thin DI singleton; the logic it wires together (`AppLockManager.attemptPin`) already has its own unit tests from Task 6.
 
@@ -1404,12 +1407,14 @@ class SecurityGraph(context: Context) {
     val appLockManager: AppLockManager = AppLockManager(AppLockStore(appContext)) {
         runBlocking { SecurityWipe.wipeAndResetApp(appContext) }
     }
+}
 
-    companion object {
-        private val holder = SingletonGraph(::SecurityGraph)
+/** Standalone singleton, kept independent of other runtimes — mirrors how `PushRuntime`/
+ *  `DataRuntime` each stand alone rather than nesting inside their graph classes. */
+object SecurityRuntime {
+    private val holder = SingletonGraph(::SecurityGraph)
 
-        fun of(context: Context): SecurityGraph = holder.get(context)
-    }
+    fun graph(context: Context): SecurityGraph = holder.get(context)
 }
 ```
 
@@ -1485,7 +1490,6 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.urlxl.mail.R
 import com.urlxl.mail.applyThemeToActivity
-import com.urlxl.mail.data.DataRuntime
 import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
 
@@ -1507,7 +1511,7 @@ class UnlockActivity : AppCompatActivity() {
         applyThemeToActivity(this)
         window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
 
-        appLockManager = SecurityGraph.of(this).appLockManager
+        appLockManager = SecurityRuntime.graph(this).appLockManager
 
         pinField = findViewById(R.id.unlockPinField)
         errorText = findViewById(R.id.unlockErrorText)
@@ -1704,7 +1708,7 @@ import com.urlxl.mail.contacts.ContactsRuntime
 import com.urlxl.mail.contacts.device.DeviceContactsRuntime
 import com.urlxl.mail.push.PushNotificationDispatcher
 import com.urlxl.mail.push.PushRuntime
-import com.urlxl.mail.security.SecurityGraph
+import com.urlxl.mail.security.SecurityRuntime
 import com.urlxl.mail.security.UnlockActivity
 
 class KyPostApp : Application(), DefaultLifecycleObserver {
@@ -1721,7 +1725,7 @@ class KyPostApp : Application(), DefaultLifecycleObserver {
 
     override fun onStart(owner: LifecycleOwner) {
         // App moved to the foreground.
-        if (SecurityGraph.of(this).appLockManager.locked.value) {
+        if (SecurityRuntime.graph(this).appLockManager.locked.value) {
             startActivity(
                 Intent(this, UnlockActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
@@ -1744,7 +1748,7 @@ class KyPostApp : Application(), DefaultLifecycleObserver {
     }
 
     override fun onStop(owner: LifecycleOwner) {
-        SecurityGraph.of(this).appLockManager.lockNow()
+        SecurityRuntime.graph(this).appLockManager.lockNow()
     }
 }
 ```
@@ -1810,6 +1814,13 @@ class SecuritySettingsActivity : AppCompatActivity() {
     private lateinit var appLockStore: AppLockStore
     private lateinit var lockSwitch: Switch
     private lateinit var biometricSwitch: Switch
+    // Suppresses lockSwitch's listener during a programmatic revert (setup cancelled/failed) —
+    // without this, reverting isChecked re-fires the listener into the OPPOSITE flow (e.g.
+    // reverting to "off" after a cancelled PIN-set pops up "enter PIN to disable", which always
+    // fails since no PIN was set, bouncing the user into an unbreakable dialog ping-pong, and
+    // worse, letting a wrong-PIN "disable" attempt bounce into promptSetPin(), which sets a new
+    // PIN unconditionally — bypassing the "must know the current PIN to disable" guarantee).
+    private var suppressLockToggleListener = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -1843,7 +1854,10 @@ class SecuritySettingsActivity : AppCompatActivity() {
         }
         container.addView(biometricSwitch)
 
-        lockSwitch.setOnCheckedChangeListener { _, checked -> onLockToggle(checked) }
+        lockSwitch.setOnCheckedChangeListener { _, checked ->
+            if (suppressLockToggleListener) return@setOnCheckedChangeListener
+            onLockToggle(checked)
+        }
         biometricSwitch.setOnCheckedChangeListener { _, checked -> appLockStore.setBiometricEnabled(checked) }
 
         scrollView.addView(container)
@@ -1857,6 +1871,13 @@ class SecuritySettingsActivity : AppCompatActivity() {
         } else {
             promptDisableLock()
         }
+    }
+
+    /** Reverts [lockSwitch] without re-triggering [onLockToggle] — see [suppressLockToggleListener]. */
+    private fun revertLockSwitch(checked: Boolean) {
+        suppressLockToggleListener = true
+        lockSwitch.isChecked = checked
+        suppressLockToggleListener = false
     }
 
     private fun promptSetPin() {
@@ -1874,10 +1895,10 @@ class SecuritySettingsActivity : AppCompatActivity() {
                     appLockStore.setLockEnabled(true)
                     biometricSwitch.isEnabled = true
                 } else {
-                    lockSwitch.isChecked = false
+                    revertLockSwitch(false)
                 }
             }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> lockSwitch.isChecked = false }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> revertLockSwitch(false) }
             .setCancelable(false)
             .show()
     }
@@ -1892,12 +1913,15 @@ class SecuritySettingsActivity : AppCompatActivity() {
             .setView(pinField)
             .setPositiveButton(R.string.security_set_pin_confirm) { _, _ ->
                 if (appLockStore.verifyPin(pinField.text.toString())) {
-                    lifecycleScope.launch { SecurityWipe.wipeAndResetApp(this@SecuritySettingsActivity) }
+                    lifecycleScope.launch {
+                        SecurityWipe.wipeAndResetApp(this@SecuritySettingsActivity)
+                        AppRestart.relaunch(this@SecuritySettingsActivity)
+                    }
                 } else {
-                    lockSwitch.isChecked = true
+                    revertLockSwitch(true)
                 }
             }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> lockSwitch.isChecked = true }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> revertLockSwitch(true) }
             .setCancelable(false)
             .show()
     }
@@ -2026,14 +2050,17 @@ Also update `onLockToggle`/`promptDisableLock`'s success paths to keep `hostileL
 .setPositiveButton(R.string.security_set_pin_confirm) { _, _ ->
     if (appLockStore.verifyPin(pinField.text.toString())) {
         HostileLocationSettings(this@SecuritySettingsActivity).setEnabled(false)
-        lifecycleScope.launch { SecurityWipe.wipeAndResetApp(this@SecuritySettingsActivity) }
+        lifecycleScope.launch {
+            SecurityWipe.wipeAndResetApp(this@SecuritySettingsActivity)
+            AppRestart.relaunch(this@SecuritySettingsActivity)
+        }
     } else {
-        lockSwitch.isChecked = true
+        revertLockSwitch(true)
     }
 }
 ```
 
-(`SecurityWipe.wipeAndResetApp` already deletes the Room DB regardless of which mode it was in, so no separate in-memory-vs-disk handling is needed here — this just ensures the flag itself is off before the app restarts as part of the wipe's normal first-run flow.)
+(`SecurityWipe.wipeAndResetApp` already deletes the Room DB regardless of which mode it was in, so no separate in-memory-vs-disk handling is needed here — this just ensures the flag itself is off before the app restarts as part of the wipe's normal first-run flow. The explicit `AppRestart.relaunch` call after the wipe is required per `SecurityWipe`'s own caller contract, established during Task 7's review.)
 
 - [ ] **Step 2: Add strings**
 
@@ -2068,7 +2095,7 @@ git commit -m "android: add Hostile Location Protection toggle, gated on app loc
 - Test: `app/src/test/java/com/urlxl/mail/security/CredentialCipherTest.kt`
 
 **Interfaces:**
-- Produces: `data class WrappedSecret(val salt: ByteArray, val iv: ByteArray, val ciphertext: ByteArray)`, `object CredentialCipher { fun randomSalt(): ByteArray; fun deriveKey(pin: String, salt: ByteArray): SecretKeySpec; fun wrap(plaintext: String, key: SecretKeySpec): WrappedSecret; fun unwrap(wrapped: WrappedSecret, key: SecretKeySpec): String? }`. Consumed by `SecurePairingStore` (Task 19).
+- Produces: `data class WrappedSecret(val iv: ByteArray, val ciphertext: ByteArray)`, `object CredentialCipher { fun randomSalt(): ByteArray; fun deriveKey(pin: String, salt: ByteArray): SecretKeySpec; fun wrap(plaintext: String, key: SecretKeySpec): WrappedSecret; fun unwrap(wrapped: WrappedSecret, key: SecretKeySpec): String? }`. Consumed by `SecurePairingStore` (Task 19). Note: the PBKDF2 salt itself is deliberately *not* part of `WrappedSecret` — the salt is an input to `deriveKey`, owned and persisted by the caller (`SecurePairingStore` stores it once per pairing, independent of each wrap call), not an output of wrapping a single value.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2134,16 +2161,17 @@ private const val SALT_LENGTH_BYTES = 16
 private const val GCM_IV_LENGTH_BYTES = 12
 private const val GCM_TAG_LENGTH_BITS = 128
 
-/** [salt] is the PBKDF2 salt the wrapping key was derived from — not secret, stored alongside
- *  [ciphertext] so the same key can be re-derived later from just the PIN. */
-data class WrappedSecret(val salt: ByteArray, val iv: ByteArray, val ciphertext: ByteArray)
+/** The PBKDF2 salt is deliberately not part of this type — it's an input to [CredentialCipher.deriveKey],
+ *  owned and persisted once per pairing by the caller ([com.urlxl.mail.push.SecurePairingStore]),
+ *  not an output of wrapping a single value. */
+data class WrappedSecret(val iv: ByteArray, val ciphertext: ByteArray)
 
 /**
  * PIN-derived AES-GCM wrapping for the pairing `deviceSecret` — see "Require unlock to receive
  * push/MFA" in the 2026-07-22 security-hardening spec. Deliberately independent of Android
  * Keystore: unlike [AppLockStore]'s Keystore-backed prefs, this key must be re-derivable from
- * just the PIN + [WrappedSecret.salt] on demand (whenever [AppLockManager] caches it after a
- * successful unlock), not tied to hardware key material.
+ * just the PIN + a stored salt on demand (whenever [AppLockManager] caches it after a successful
+ * unlock), not tied to hardware key material.
  */
 object CredentialCipher {
     fun randomSalt(): ByteArray = ByteArray(SALT_LENGTH_BYTES).also { SecureRandom().nextBytes(it) }
@@ -2159,7 +2187,7 @@ object CredentialCipher {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
         val ciphertext = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
-        return WrappedSecret(salt = ByteArray(0), iv = iv, ciphertext = ciphertext)
+        return WrappedSecret(iv = iv, ciphertext = ciphertext)
     }
 
     /** Null on a wrong key or corrupted/tampered ciphertext (GCM's auth tag fails to verify) —
@@ -2172,8 +2200,6 @@ object CredentialCipher {
     }.getOrNull()
 }
 ```
-
-Note: `wrap`'s returned `WrappedSecret.salt` is left empty since the salt is derived and owned by the caller (`deriveKey`'s input) — `SecurePairingStore` (Task 19) generates and stores the salt itself once, independent of each individual wrap call, and always passes the same salt back into `deriveKey` to reconstruct the key. Update the round-trip test above if this trips it up: it doesn't, since the test never reads `wrapped.salt`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -2370,9 +2396,11 @@ private fun resolveDeviceSecret(credentialKey: SecretKeySpec?): String? {
     if (wrappedCiphertext == null) return prefs.getString(KEY_DEVICE_SECRET, null)
     val key = credentialKey ?: return null
     val iv = prefs.getString(KEY_DEVICE_SECRET_IV, null)?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return null
-    val salt = prefs.getString(KEY_DEVICE_SECRET_SALT, null)?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return null
     val ciphertext = Base64.decode(wrappedCiphertext, Base64.NO_WRAP)
-    return CredentialCipher.unwrap(WrappedSecret(salt, iv, ciphertext), key)
+    // The salt (KEY_DEVICE_SECRET_SALT) isn't read here — credentialKey has already been derived
+    // from it by the caller (see AppLockManager.cacheCredentialKeyIfEnabled, Task 20); it's
+    // exposed separately via currentCredentialSalt() for that derivation to happen at all.
+    return CredentialCipher.unwrap(WrappedSecret(iv, ciphertext), key)
 }
 ```
 
@@ -2586,11 +2614,15 @@ git commit -m "android: cache PIN-derived credential key for an unlocked session
 
 **Files:**
 - Modify: `app/src/main/java/com/urlxl/mail/push/PushRepository.kt`
+- Modify: `app/src/main/java/com/urlxl/mail/security/AppLockManager.kt`
 - Modify: `app/src/main/java/com/urlxl/mail/security/SecuritySettingsActivity.kt`
 - Modify: `app/src/main/res/values/strings.xml`
 
 **Interfaces:**
-- Consumes: `SecurePairingStore.pairingSnapshot`/`savePairing` (Task 19), `AppLockManager.cachedCredentialKey()` (Task 20), `SecurityGraph` (Task 13).
+- Consumes: `SecurePairingStore.pairingSnapshot`/`savePairing` (Task 19), `AppLockManager.cachedCredentialKey()` (Task 20), `SecurityRuntime` (Task 13).
+- Produces: `AppLockManager.deriveAndCacheCredentialKey(pin: String): Boolean` (new — see Step 5 below).
+
+**Important correctness note found during this plan's own review (Task 20):** the registration-time wrapping in Step 4 alone is not sufficient. A user who already has a working pairing and only *later* turns toggle 3 on would have their existing `deviceSecret` sitting unwrapped indefinitely — nothing re-saves it. Worse, turning toggle 3 back *off* would leave the stored secret wrapped with no code path that ever unwraps it, permanently breaking authentication once the app relocks (since `cachedCredentialKey()` goes back to null once the gate is reported disabled). Both directions must re-derive the key on the spot (via a fresh PIN entry, since the app being merely "unlocked" doesn't guarantee a PIN-derived key is cached — the session may have been unlocked via biometric) and immediately re-save the current pairing in the matching form. Steps 5-6 below implement this; this supersedes the simpler confirm-only flow this task originally sketched.
 
 No new automated test: this wires already-tested pieces (`SecurePairingStoreCredentialGateTest`, `AppLockManagerTest`) together at the one call site that matters (`PushRepository`'s reactive `pairing` state) — an end-to-end test would need a real paired device and background service lifecycle, out of proportion for this task.
 
@@ -2603,7 +2635,7 @@ Read `app/src/main/java/com/urlxl/mail/push/PushRepository.kt` in full to find e
 In `PushRepository.kt`, add:
 
 ```kotlin
-import com.urlxl.mail.security.SecurityGraph
+import com.urlxl.mail.security.SecurityRuntime
 
 /** Pairing data for making an authenticated relay call right now — `deviceSecret` comes back
  *  null if "require unlock to receive push/MFA" is on and the app isn't currently unlocked via
@@ -2611,7 +2643,7 @@ import com.urlxl.mail.security.SecurityGraph
  *  deviceSecret as an auth failure (see [com.urlxl.mail.pairingAuthHeaders]'s `.orEmpty()`
  *  usage), so this fails the same way a real 401 would — no new error path needed. */
 fun pairingForAuthenticatedCall(): PairingData? =
-    securePairingStore.pairingSnapshot(SecurityGraph.of(context).appLockManager.cachedCredentialKey())
+    securePairingStore.pairingSnapshot(SecurityRuntime.graph(context).appLockManager.cachedCredentialKey())
 ```
 
 - [ ] **Step 3: Redirect authenticated-call sites to the new snapshot method**
@@ -2629,7 +2661,7 @@ For each match that's used to build an authenticated request (not a plain "is pa
 Find where pairing is first saved after a successful registration (in `PushRepository` or wherever `savePairing` is currently called), and change it to:
 
 ```kotlin
-val appLockManager = SecurityGraph.of(context).appLockManager
+val appLockManager = SecurityRuntime.graph(context).appLockManager
 val credentialKey = appLockManager.cachedCredentialKey()
 if (credentialKey != null) {
     securePairingStore.savePairing(newPairing, credentialKey, securePairingStore... /* the salt AppLockManager just used/created */)
@@ -2650,12 +2682,49 @@ if (credentialKey != null && credentialSalt != null) {
 }
 ```
 
-- [ ] **Step 5: Add toggle 3 to SecuritySettingsActivity**
+- [ ] **Step 5: Add on-demand key derivation to AppLockManager**
 
-In `SecuritySettingsActivity.onCreate`, after the Hostile Location Protection block:
+Read the current `app/src/main/java/com/urlxl/mail/security/AppLockManager.kt` in full (post-Task-20) first. It currently has a private `cacheCredentialKeyIfEnabled(pin: String)`, called only from `attemptPin`'s success branch and gated on `state.isCredentialPinGateEnabled()`. Toggling the gate itself has no "successful unlock" event to hang off of — the app is already unlocked when the user flips the switch, and if they unlocked via biometric this session, no PIN-derived key exists yet to reuse. Refactor to extract the shared derive-or-reuse-salt logic, and add a new public method that works regardless of the gate's current enabled state (since it's used to transition the gate itself):
 
 ```kotlin
-val credentialGateSwitch = Switch(this).apply {
+fun deriveAndCacheCredentialKey(pin: String): Boolean {
+    if (!state.verifyPin(pin)) return false
+    credentialKey = deriveKeyUsingPersistedSalt(pin)
+    return true
+}
+
+private fun cacheCredentialKeyIfEnabled(pin: String) {
+    if (!state.isCredentialPinGateEnabled()) return
+    credentialKey = deriveKeyUsingPersistedSalt(pin)
+}
+
+private fun deriveKeyUsingPersistedSalt(pin: String): SecretKeySpec {
+    val salt = state.credentialSalt() ?: CredentialCipher.randomSalt().also { state.setCredentialSalt(it) }
+    return CredentialCipher.deriveKey(pin, salt)
+}
+```
+
+Replace the body of the existing `cacheCredentialKeyIfEnabled` with the two-liner above (delegating to the new shared helper) — do not duplicate the salt-derivation logic. Run the full `AppLockManagerTest` suite (`./gradlew :app:testDebugUnitTest --tests "com.urlxl.mail.security.AppLockManagerTest"`) to confirm all 10 existing tests still pass unchanged (this is a refactor of already-tested logic, not new behavior on the `attemptPin` path).
+
+- [ ] **Step 6: Add toggle 3 to SecuritySettingsActivity, with PIN-gated enable/disable and pairing re-wrap**
+
+In `SecuritySettingsActivity.onCreate`, after the Hostile Location Protection block, add the switch as a `lateinit var` field (mirroring `lockSwitch`/`hostileLocationSwitch`) so it can be reverted programmatically without re-triggering its own listener — same re-entrancy hazard as `lockSwitch` in Task 16, guarded the same way:
+
+```kotlin
+// class-level field, alongside lockSwitch/hostileLocationSwitch/suppressLockToggleListener:
+private lateinit var credentialGateSwitch: Switch
+private var suppressCredentialGateListener = false
+
+private fun revertCredentialGateSwitch(checked: Boolean) {
+    suppressCredentialGateListener = true
+    credentialGateSwitch.isChecked = checked
+    suppressCredentialGateListener = false
+}
+```
+
+```kotlin
+// in onCreate, after the Hostile Location Protection block:
+credentialGateSwitch = Switch(this).apply {
     text = getString(R.string.security_credential_gate_title)
     isChecked = appLockStore.isCredentialPinGateEnabled()
     isEnabled = appLockStore.isLockEnabled()
@@ -2668,30 +2737,83 @@ container.addView(
         setPadding(0, 4, 0, 16)
     },
 )
-credentialGateSwitch.setOnCheckedChangeListener { button, checked ->
-    if (checked) {
-        confirmEnableCredentialGate(button as Switch)
-    } else {
-        appLockStore.setCredentialPinGateEnabled(false)
-    }
-}
-
-private fun confirmEnableCredentialGate(switch: Switch) {
-    AlertDialog.Builder(this)
-        .setTitle(R.string.security_credential_gate_warning_title)
-        .setMessage(R.string.security_credential_gate_warning_body)
-        .setPositiveButton(R.string.security_credential_gate_warning_confirm) { _, _ ->
-            appLockStore.setCredentialPinGateEnabled(true)
-        }
-        .setNegativeButton(android.R.string.cancel) { _, _ -> switch.isChecked = false }
-        .setCancelable(false)
-        .show()
+credentialGateSwitch.setOnCheckedChangeListener { _, checked ->
+    if (suppressCredentialGateListener) return@setOnCheckedChangeListener
+    if (checked) confirmEnableCredentialGate() else confirmDisableCredentialGate()
 }
 ```
 
-(`confirmEnableCredentialGate` is a new private method on the Activity, alongside `promptSetPin`/`promptDisableLock`.)
+```kotlin
+private fun confirmEnableCredentialGate() {
+    AlertDialog.Builder(this)
+        .setTitle(R.string.security_credential_gate_warning_title)
+        .setMessage(R.string.security_credential_gate_warning_body)
+        .setPositiveButton(R.string.security_credential_gate_warning_confirm) { _, _ -> promptCredentialGatePin(enabling = true) }
+        .setNegativeButton(android.R.string.cancel) { _, _ -> revertCredentialGateSwitch(false) }
+        .setCancelable(false)
+        .show()
+}
 
-- [ ] **Step 6: Add strings**
+private fun confirmDisableCredentialGate() {
+    promptCredentialGatePin(enabling = false)
+}
+
+/** Both directions need the PIN re-entered here (not just "the app happens to be unlocked
+ *  right now") to guarantee a fresh PIN-derived key is available to actually re-wrap or
+ *  unwrap the current pairing's deviceSecret in the same step — see this task's correctness
+ *  note about why a confirm-only flow isn't sufficient. */
+private fun promptCredentialGatePin(enabling: Boolean) {
+    val pinField = android.widget.EditText(this).apply {
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        hint = getString(R.string.unlock_pin_hint)
+    }
+    AlertDialog.Builder(this)
+        .setTitle(R.string.security_credential_gate_pin_title)
+        .setView(pinField)
+        .setPositiveButton(R.string.security_set_pin_confirm) { _, _ ->
+            val appLockManager = SecurityRuntime.graph(this).appLockManager
+            if (appLockManager.deriveAndCacheCredentialKey(pinField.text.toString())) {
+                appLockStore.setCredentialPinGateEnabled(enabling)
+                if (enabling) rewrapCurrentPairing() else unwrapCurrentPairing()
+            } else {
+                revertCredentialGateSwitch(!enabling)
+            }
+        }
+        .setNegativeButton(android.R.string.cancel) { _, _ -> revertCredentialGateSwitch(!enabling) }
+        .setCancelable(false)
+        .show()
+}
+
+/** Re-saves the currently-paired credentials wrapped behind the just-derived key — without
+ *  this, turning the gate on would only take effect for pairing data saved AFTER this point
+ *  (a future re-pair), leaving an existing pairing's deviceSecret unwrapped indefinitely. */
+private fun rewrapCurrentPairing() {
+    lifecycleScope.launch {
+        val securePairingStore = com.urlxl.mail.push.SecurePairingStore(this@SecuritySettingsActivity)
+        val currentPairing = securePairingStore.pairing.value ?: return@launch
+        val appLockManager = SecurityRuntime.graph(this@SecuritySettingsActivity).appLockManager
+        val credentialKey = appLockManager.cachedCredentialKey() ?: return@launch
+        val credentialSalt = appLockStore.credentialSalt() ?: return@launch
+        securePairingStore.savePairing(currentPairing, credentialKey, credentialSalt)
+    }
+}
+
+/** The inverse of [rewrapCurrentPairing] — without this, turning the gate back off would leave
+ *  deviceSecret stored wrapped with no code path that ever unwraps it, permanently breaking
+ *  authentication the next time the app locks (cachedCredentialKey() goes back to null once the
+ *  gate reports disabled, and resolveDeviceSecret has no other way to read the wrapped value). */
+private fun unwrapCurrentPairing() {
+    lifecycleScope.launch {
+        val securePairingStore = com.urlxl.mail.push.SecurePairingStore(this@SecuritySettingsActivity)
+        val appLockManager = SecurityRuntime.graph(this@SecuritySettingsActivity).appLockManager
+        val credentialKey = appLockManager.cachedCredentialKey() ?: return@launch
+        val currentPairing = securePairingStore.pairingSnapshot(credentialKey) ?: return@launch
+        securePairingStore.savePairing(currentPairing)
+    }
+}
+```
+
+- [ ] **Step 7: Add strings**
 
 ```xml
 <string name="security_credential_gate_title">Require unlock to receive push/MFA</string>
@@ -2699,21 +2821,22 @@ private fun confirmEnableCredentialGate(switch: Switch) {
 <string name="security_credential_gate_warning_title">This disables background notifications while locked</string>
 <string name="security_credential_gate_warning_body">While this is on, you will not receive new-mail push notifications or MFA approval requests until you open the app and enter your PIN. Turn this on only if you understand that tradeoff.</string>
 <string name="security_credential_gate_warning_confirm">Turn on anyway</string>
+<string name="security_credential_gate_pin_title">Enter your PIN to continue</string>
 ```
 
-- [ ] **Step 7: Build**
+- [ ] **Step 8: Build**
 
 Run: `./gradlew :app:assembleDebug`
 Expected: `BUILD SUCCESSFUL`
 
-- [ ] **Step 8: Manually verify**
+- [ ] **Step 9: Manually verify**
 
-Manual check: enable toggle 3, background the app, send a test push/MFA approval from the server — confirm no notification arrives. Reopen and unlock the app — confirm normal sync resumes (via the existing `KyPostApp.onStart` pull/sync calls) without any additional user action.
+Manual check: with an existing pairing, enable toggle 3 (entering the correct PIN when prompted) — confirm the setting sticks after backgrounding/foregrounding the app (re-unlocking with the PIN). Background the app, send a test push/MFA approval from the server — confirm no notification arrives. Reopen and unlock the app via PIN — confirm normal sync resumes (via the existing `KyPostApp.onStart` pull/sync calls) without any additional user action. Then turn toggle 3 back off (entering the PIN again when prompted) — confirm push/MFA delivery resumes normally afterward, proving the pairing was genuinely unwrapped back to a usable state and not left stuck.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add app/src/main/java/com/urlxl/mail/push/PushRepository.kt app/src/main/java/com/urlxl/mail/security/SecuritySettingsActivity.kt app/src/main/res/values/strings.xml
+git add app/src/main/java/com/urlxl/mail/push/PushRepository.kt app/src/main/java/com/urlxl/mail/security/AppLockManager.kt app/src/main/java/com/urlxl/mail/security/SecuritySettingsActivity.kt app/src/main/res/values/strings.xml
 git commit -m "android: wire credential PIN-gate into push auth and settings UI"
 ```
 
