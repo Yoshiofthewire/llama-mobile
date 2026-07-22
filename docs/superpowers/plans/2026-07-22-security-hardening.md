@@ -1896,7 +1896,10 @@ class SecuritySettingsActivity : AppCompatActivity() {
             .setView(pinField)
             .setPositiveButton(R.string.security_set_pin_confirm) { _, _ ->
                 if (appLockStore.verifyPin(pinField.text.toString())) {
-                    lifecycleScope.launch { SecurityWipe.wipeAndResetApp(this@SecuritySettingsActivity) }
+                    lifecycleScope.launch {
+                        SecurityWipe.wipeAndResetApp(this@SecuritySettingsActivity)
+                        AppRestart.relaunch(this@SecuritySettingsActivity)
+                    }
                 } else {
                     lockSwitch.isChecked = true
                 }
@@ -2030,14 +2033,17 @@ Also update `onLockToggle`/`promptDisableLock`'s success paths to keep `hostileL
 .setPositiveButton(R.string.security_set_pin_confirm) { _, _ ->
     if (appLockStore.verifyPin(pinField.text.toString())) {
         HostileLocationSettings(this@SecuritySettingsActivity).setEnabled(false)
-        lifecycleScope.launch { SecurityWipe.wipeAndResetApp(this@SecuritySettingsActivity) }
+        lifecycleScope.launch {
+            SecurityWipe.wipeAndResetApp(this@SecuritySettingsActivity)
+            AppRestart.relaunch(this@SecuritySettingsActivity)
+        }
     } else {
         lockSwitch.isChecked = true
     }
 }
 ```
 
-(`SecurityWipe.wipeAndResetApp` already deletes the Room DB regardless of which mode it was in, so no separate in-memory-vs-disk handling is needed here — this just ensures the flag itself is off before the app restarts as part of the wipe's normal first-run flow.)
+(`SecurityWipe.wipeAndResetApp` already deletes the Room DB regardless of which mode it was in, so no separate in-memory-vs-disk handling is needed here — this just ensures the flag itself is off before the app restarts as part of the wipe's normal first-run flow. The explicit `AppRestart.relaunch` call after the wipe is required per `SecurityWipe`'s own caller contract, established during Task 7's review.)
 
 - [ ] **Step 2: Add strings**
 
